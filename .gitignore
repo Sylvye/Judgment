@@ -1,0 +1,12 @@
+.gradle/
+build/
+*.log
+
+# IDE/local files
+.idea/
+*.iml
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

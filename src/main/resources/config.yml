@@ -1,0 +1,8 @@
+# PvP combat tag duration before a logout can be judged.
+combat-tag-seconds: 30
+
+# Current implemented behavior is relog. "instant" is reserved and falls back to relog for now.
+punishment-mode: relog
+
+# Prompt timeout for clickable YES/NO choices.
+prompt-timeout-seconds: 10
