@@ -3,6 +3,8 @@ package com.bountysmp.judgment.service;
 import com.bountysmp.judgment.config.JudgmentSettings;
 import com.bountysmp.judgment.model.CombatLogCase;
 import com.bountysmp.judgment.model.CombatTag;
+import com.bountysmp.judgment.model.CombatTagDirection;
+import com.bountysmp.judgment.model.CombatTagStack;
 import com.bountysmp.judgment.storage.PendingKill;
 import com.bountysmp.judgment.storage.PendingKillStore;
 import net.kyori.adventure.text.Component;
@@ -14,6 +16,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,7 +41,7 @@ public final class JudgmentService {
     private final LongSupplier clock;
     private final PunishmentExecutor punishmentExecutor;
     private final UncreditedPunishmentExecutor uncreditedPunishmentExecutor;
-    private final Map<UUID, CombatTag> combatTags = new ConcurrentHashMap<>();
+    private final Map<UUID, CombatTagStack> combatStacks = new ConcurrentHashMap<>();
     private final Map<String, CombatLogCase> openCases = new ConcurrentHashMap<>();
     private volatile JudgmentSettings settings;
 
@@ -85,12 +89,29 @@ public final class JudgmentService {
         }
 
         long expiresAt = clock.getAsLong() + settings.combatTagMillis();
-        tagParticipant(victim, attacker, expiresAt);
-        tagParticipant(attacker, victim, expiresAt);
+        long updatedAt = clock.getAsLong();
+        tagParticipant(victim, attacker, attacker, CombatTagDirection.INCOMING, expiresAt, updatedAt);
+        tagParticipant(attacker, victim, victim, CombatTagDirection.OUTGOING, expiresAt, updatedAt);
     }
 
     public Optional<CombatTag> getCombatTag(UUID playerId) {
-        return Optional.ofNullable(combatTags.get(playerId));
+        CombatTagStack stack = combatStacks.get(playerId);
+        if (stack == null) {
+            return Optional.empty();
+        }
+        return stack.topActive(clock.getAsLong());
+    }
+
+    public List<CombatTag> getCombatStack(UUID playerId) {
+        CombatTagStack stack = combatStacks.get(playerId);
+        if (stack == null) {
+            return List.of();
+        }
+        List<CombatTag> activeTags = stack.activeTags(clock.getAsLong());
+        if (activeTags.isEmpty()) {
+            combatStacks.remove(playerId);
+        }
+        return activeTags;
     }
 
     public Optional<CombatLogCase> getOpenCase(String caseId) {
@@ -102,13 +123,18 @@ public final class JudgmentService {
     }
 
     public void handleQuit(Player player) {
-        CombatTag tag = combatTags.remove(player.getUniqueId());
         long now = clock.getAsLong();
-        if (tag == null || !tag.isActive(now)) {
+        CombatTagStack stack = combatStacks.remove(player.getUniqueId());
+        if (stack == null) {
+            return;
+        }
+        Optional<CombatTag> topTag = stack.topActive(now);
+        if (topTag.isEmpty()) {
             return;
         }
 
-        Player killer = Bukkit.getPlayer(tag.killerId());
+        CombatTag tag = topTag.get();
+        Player killer = Bukkit.getPlayer(tag.creditedId());
         if (killer == null) {
             return;
         }
@@ -116,10 +142,10 @@ public final class JudgmentService {
         String caseId = UUID.randomUUID().toString();
         CombatLogCase combatLogCase = new CombatLogCase(
             caseId,
-            tag.offenderId(),
-            tag.offenderName(),
-            tag.killerId(),
-            tag.killerName(),
+            tag.ownerId(),
+            tag.ownerName(),
+            tag.creditedId(),
+            tag.creditedName(),
             now + settings.promptTimeoutMillis()
         );
         openCases.put(caseId, combatLogCase);
@@ -130,16 +156,15 @@ public final class JudgmentService {
     }
 
     public void handleDeath(Player player) {
-        CombatTag tag = combatTags.remove(player.getUniqueId());
-        if (tag == null) {
-            clearTagsTargeting(player.getUniqueId(), player.getName());
-            return;
-        }
-
-        CombatTag opponentTag = combatTags.get(tag.killerId());
-        if (opponentTag != null && opponentTag.killerId().equals(player.getUniqueId())) {
-            combatTags.remove(tag.killerId());
-            notifyNoLongerInCombat(tag.killerId(), player.getName());
+        combatStacks.remove(player.getUniqueId());
+        for (Map.Entry<UUID, CombatTagStack> entry : new ArrayList<>(combatStacks.entrySet())) {
+            CombatTagStack stack = entry.getValue();
+            if (stack.removeReferencing(player.getUniqueId())) {
+                notifyNoLongerInCombat(entry.getKey(), player.getName());
+            }
+            if (stack.isEmpty()) {
+                combatStacks.remove(entry.getKey());
+            }
         }
     }
 
@@ -242,17 +267,47 @@ public final class JudgmentService {
         }
     }
 
-    private void tagParticipant(Player player, Player opponent, long expiresAt) {
-        long now = clock.getAsLong();
-        CombatTag previous = combatTags.get(player.getUniqueId());
-        boolean enteringCombat = previous == null || !previous.isActive(now);
+    public List<Component> debugStack(Player target) {
+        List<CombatTag> tags = getCombatStack(target.getUniqueId());
+        if (tags.isEmpty()) {
+            return List.of(Component.text("No active combat tags.", NamedTextColor.YELLOW));
+        }
 
-        combatTags.put(player.getUniqueId(), new CombatTag(
+        long now = clock.getAsLong();
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.text("Combat stack for " + target.getName() + ":", NamedTextColor.GOLD));
+        for (int index = 0; index < tags.size(); index++) {
+            CombatTag tag = tags.get(index);
+            boolean promptEligible = Bukkit.getPlayer(tag.creditedId()) != null;
+            lines.add(Component.text(
+                "#" + (index + 1)
+                    + " " + tag.direction().displayName()
+                    + " opponent=" + tag.opponentName()
+                    + " credit=" + tag.creditedName()
+                    + " remaining=" + formatSeconds(Math.max(0L, tag.expiresAtMillis() - now)) + "s"
+                    + " promptEligible=" + promptEligible,
+                index == 0 ? NamedTextColor.GREEN : NamedTextColor.GRAY
+            ));
+        }
+        return lines;
+    }
+
+    private void tagParticipant(Player player, Player opponent, Player credited, CombatTagDirection direction, long expiresAt, long updatedAt) {
+        long now = clock.getAsLong();
+        CombatTagStack stack = combatStacks.computeIfAbsent(player.getUniqueId(), CombatTagStack::new);
+        stack.pruneExpired(now);
+        boolean enteringCombat = stack.isEmpty();
+
+        stack.addOrRefresh(new CombatTag(
             player.getUniqueId(),
             player.getName(),
             opponent.getUniqueId(),
             opponent.getName(),
-            expiresAt
+            credited.getUniqueId(),
+            credited.getName(),
+            direction,
+            expiresAt,
+            updatedAt
         ));
 
         if (enteringCombat) {
@@ -263,37 +318,36 @@ public final class JudgmentService {
         }
 
         long ticks = Math.max(1L, ((expiresAt - now) + 49L) / 50L);
-        Bukkit.getScheduler().runTaskLater(plugin, () -> expireCombatTag(player.getUniqueId(), expiresAt), ticks);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> expireCombatTag(player.getUniqueId(), opponent.getUniqueId(), direction, expiresAt), ticks);
     }
 
-    private void expireCombatTag(UUID playerId, long expiresAt) {
-        CombatTag tag = combatTags.get(playerId);
-        if (tag == null || tag.expiresAtMillis() != expiresAt) {
+    private void expireCombatTag(UUID playerId, UUID opponentId, CombatTagDirection direction, long expiresAt) {
+        CombatTagStack stack = combatStacks.get(playerId);
+        if (stack == null) {
+            return;
+        }
+        Optional<CombatTag> currentTag = stack.get(opponentId, direction);
+        if (currentTag.isEmpty() || currentTag.get().expiresAtMillis() != expiresAt) {
             return;
         }
 
         long now = clock.getAsLong();
-        if (tag.isActive(now)) {
+        if (currentTag.get().isActive(now)) {
             long remainingTicks = Math.max(1L, ((expiresAt - now) + 49L) / 50L);
-            Bukkit.getScheduler().runTaskLater(plugin, () -> expireCombatTag(playerId, expiresAt), remainingTicks);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> expireCombatTag(playerId, opponentId, direction, expiresAt), remainingTicks);
             return;
         }
 
-        combatTags.remove(playerId);
+        stack.remove(opponentId, direction);
+        if (!stack.isEmpty()) {
+            return;
+        }
+
+        combatStacks.remove(playerId);
         Player player = Bukkit.getPlayer(playerId);
         if (player != null) {
             player.sendActionBar(Component.text("You have left combat, you may now log out.", NamedTextColor.GREEN));
         }
-    }
-
-    private void clearTagsTargeting(UUID playerId, String playerName) {
-        combatTags.entrySet().removeIf(entry -> {
-            if (!entry.getValue().killerId().equals(playerId)) {
-                return false;
-            }
-            notifyNoLongerInCombat(entry.getKey(), playerName);
-            return true;
-        });
     }
 
     private void notifyNoLongerInCombat(UUID playerId, String opponentName) {
