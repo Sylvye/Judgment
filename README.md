@@ -46,7 +46,16 @@ status changes are blocked until storage is repaired and the server restarted. E
 are logged; damaged data is never silently replaced with default preferences.
 
 Future modules can use `JudgmentPlugin#getPvpService()`, `isPvpEnabled(UUID)`, and
-`canAttack(UUID, UUID)` on the server thread. Dragon-egg restrictions are not implemented.
+`canAttack(UUID, UUID)` on the server thread. Dragon-egg pickup restrictions are not implemented.
+
+### Dragon Egg Privilege
+
+The administrator settings menu has a `Dragon Egg` sub-menu. The privilege is off by
+default. When enabled, a player carrying a dragon egg receives whichever effects are
+enabled there: Glow, Strength I, and Speed I. Effects are permanent while the egg is
+held and are removed when the player no longer has one. The plugin marks only its own
+effects, so unrelated potion effects are preserved. This privilege is cosmetic and
+does not change who may pick up an egg.
 
 ## Combat Tags
 
@@ -99,6 +108,13 @@ When a player dies, Judgment clears:
 This prevents death-screen disconnects, such as clicking `Title screen`, from being interpreted as combat logs.
 
 ## Commands
+
+### `/judgment pvp <player> <on|off>`
+
+Administrators with `judgment.admin` can correct a player's PvP status. This
+intentionally bypasses that player's cooldown and combat wait, and notifies both
+the administrator and affected player. The target must be online; use tab completion
+for player names and status values.
 
 ### `/judgment settings`
 

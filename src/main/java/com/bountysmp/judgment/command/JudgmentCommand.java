@@ -2,6 +2,7 @@ package com.bountysmp.judgment.command;
 
 import com.bountysmp.judgment.gui.SettingsGui;
 import com.bountysmp.judgment.service.JudgmentService;
+import com.bountysmp.judgment.pvp.PvpService;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -14,14 +15,23 @@ import org.bukkit.entity.Player;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 
 public final class JudgmentCommand implements CommandExecutor, TabCompleter {
     private final JudgmentService judgmentService;
     private final SettingsGui settingsGui;
+    private final PvpService pvpService;
+    private final Consumer<Player> pvpRefresh;
 
     public JudgmentCommand(JudgmentService judgmentService, SettingsGui settingsGui) {
+        this(judgmentService, settingsGui, null, ignored -> {});
+    }
+
+    public JudgmentCommand(JudgmentService judgmentService, SettingsGui settingsGui, PvpService pvpService, Consumer<Player> pvpRefresh) {
         this.judgmentService = judgmentService;
         this.settingsGui = settingsGui;
+        this.pvpService = pvpService;
+        this.pvpRefresh = pvpRefresh;
     }
 
     @Override
@@ -32,6 +42,30 @@ public final class JudgmentCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             settingsGui.open(player);
+            return true;
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("pvp")) {
+            if (!sender.hasPermission("judgment.admin")) {
+                sender.sendMessage(Component.text("You do not have permission to change another player's PvP status.", NamedTextColor.RED));
+                return true;
+            }
+            Player target = Bukkit.getPlayerExact(args[1]);
+            if (target == null || (!args[2].equalsIgnoreCase("on") && !args[2].equalsIgnoreCase("off"))) {
+                sender.sendMessage(Component.text("Usage: /judgment pvp <player> <on|off>", NamedTextColor.RED));
+                return true;
+            }
+            boolean enabled = args[2].equalsIgnoreCase("on");
+            PvpService.Result result = pvpService == null
+                ? new PvpService.Result(PvpService.Outcome.STORAGE_ERROR, false, 0)
+                : pvpService.adminSet(target.getUniqueId(), enabled);
+            if (result.outcome() == PvpService.Outcome.STORAGE_ERROR) {
+                sender.sendMessage(Component.text("PvP status could not be saved; no change was made.", NamedTextColor.RED));
+            } else {
+                pvpRefresh.accept(target);
+                sender.sendMessage(Component.text(target.getName() + " PvP is now " + (result.enabled() ? "ON" : "OFF") + ".", NamedTextColor.GREEN));
+                target.sendMessage(Component.text("An administrator set your PvP status to " + (result.enabled() ? "ON" : "OFF") + ".", NamedTextColor.YELLOW));
+            }
             return true;
         }
 
@@ -77,7 +111,7 @@ public final class JudgmentCommand implements CommandExecutor, TabCompleter {
         }
 
         if (sender.hasPermission("judgment.admin")) {
-            sender.sendMessage(Component.text("Usage: /judgment settings|debug stack [player]", NamedTextColor.RED));
+            sender.sendMessage(Component.text("Usage: /judgment settings|pvp <player> <on|off>|debug stack [player]", NamedTextColor.RED));
         } else {
             sender.sendMessage(Component.text("Judgment is running.", NamedTextColor.GRAY));
         }
@@ -88,9 +122,18 @@ public final class JudgmentCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1 && sender.hasPermission("judgment.admin")) {
             String prefix = args[0].toLowerCase(Locale.ROOT);
-            return Arrays.asList("settings", "debug").stream()
+            return Arrays.asList("settings", "debug", "pvp").stream()
                 .filter(value -> value.startsWith(prefix))
                 .toList();
+        }
+        if (args.length == 2 && sender.hasPermission("judgment.admin") && args[0].equalsIgnoreCase("pvp")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return Bukkit.getOnlinePlayers().stream().map(Player::getName)
+                .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
+                .sorted(String.CASE_INSENSITIVE_ORDER).toList();
+        }
+        if (args.length == 3 && sender.hasPermission("judgment.admin") && args[0].equalsIgnoreCase("pvp")) {
+            return Arrays.asList("on", "off").stream().filter(value -> value.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
         }
         if (args.length == 2 && sender.hasPermission("judgment.admin") && args[0].equalsIgnoreCase("debug")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);

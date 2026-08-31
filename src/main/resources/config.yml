@@ -13,3 +13,10 @@ pvp:
   toggle-cooldown-seconds: 86400
   # Counted after the final combat tag ends, including offline time.
   post-combat-delay-seconds: 600
+  dragon-egg:
+    # Disabled until an administrator enables the privilege.
+    enabled: false
+    effects:
+      glow: true
+      strength: true
+      speed: true

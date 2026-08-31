@@ -22,6 +22,8 @@ public class JudgmentPlugin extends JavaPlugin {
     private PvpSettings pvpSettings;
     private PvpService pvpService;
     private PvpPresentation pvpPresentation;
+    private DragonEggSettings dragonEggSettings;
+    private DragonEggPrivilege dragonEggPrivilege;
 
     public PvpService getPvpService() {
         return pvpService;
@@ -39,25 +41,32 @@ public class JudgmentPlugin extends JavaPlugin {
 
         judgmentService = new JudgmentService(this, settings, pendingKillStore, System::currentTimeMillis);
         pvpSettings = PvpSettings.fromConfig(getConfig(), getLogger());
+        dragonEggSettings = DragonEggSettings.fromConfig(getConfig(), getLogger());
         pvpService = new PvpService(new PvpStore(getDataFolder().toPath().resolve("pvp-players.yml")),
             () -> pvpSettings, System::currentTimeMillis,
             id -> judgmentService.getCombatTag(id).isPresent(), getLogger());
         pvpPresentation = new PvpPresentation(pvpService);
+        dragonEggPrivilege = new DragonEggPrivilege(this, () -> dragonEggSettings);
         settingsGui = new SettingsGui(this, () -> settings, this::setCombatTagMillis, this::setPromptTimeoutMillis,
-            () -> pvpSettings, this::setPvpSettings);
+            () -> pvpSettings, this::setPvpSettings, () -> dragonEggSettings, this::setDragonEggSettings);
         PvpCommand pvpCommand = new PvpCommand(pvpService, player -> pvpPresentation.refreshAll());
         PluginCommand pvp = Objects.requireNonNull(getCommand("pvp"), "pvp command missing from plugin.yml");
         pvp.setExecutor(pvpCommand);
         pvp.setTabCompleter(pvpCommand);
         getServer().getPluginManager().registerEvents(new PvpListener(this, pvpService, judgmentService, pvpPresentation), this);
         pvpPresentation.refreshAll();
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
+        }, 1L, 20L);
 
-        JudgmentCommand judgmentCommand = new JudgmentCommand(judgmentService, settingsGui);
+        JudgmentCommand judgmentCommand = new JudgmentCommand(judgmentService, settingsGui, pvpService,
+            player -> pvpPresentation.refreshAll());
         PluginCommand command = Objects.requireNonNull(getCommand("judgment"), "judgment command missing from plugin.yml");
         command.setExecutor(judgmentCommand);
         command.setTabCompleter(judgmentCommand);
 
-        getServer().getPluginManager().registerEvents(new JudgmentListener(judgmentService, settingsGui), this);
+        getServer().getPluginManager().registerEvents(new JudgmentListener(judgmentService, settingsGui, dragonEggPrivilege), this);
+        for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
     }
 
     @Override
@@ -78,6 +87,16 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set("pvp.toggle-cooldown-seconds", updated.toggleCooldownMillis() / 1_000.0);
         getConfig().set("pvp.post-combat-delay-seconds", updated.postCombatDelayMillis() / 1_000.0);
         saveConfig();
+    }
+
+    private void setDragonEggSettings(DragonEggSettings updated) {
+        dragonEggSettings = updated;
+        getConfig().set("pvp.dragon-egg.enabled", updated.enabled());
+        getConfig().set("pvp.dragon-egg.effects.glow", updated.glow());
+        getConfig().set("pvp.dragon-egg.effects.strength", updated.strength());
+        getConfig().set("pvp.dragon-egg.effects.speed", updated.speed());
+        saveConfig();
+        if (dragonEggPrivilege != null) for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
     }
 
     private void reloadJudgmentSettings() {

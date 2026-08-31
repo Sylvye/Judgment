@@ -40,6 +40,14 @@ class PvpIntegrationTest {
         assertTrue(server.dispatchCommand(server.getConsoleSender(), "pvp"));
         assertTrue(server.dispatchCommand(player, "pvp invalid"));
         assertTrue(server.dispatchCommand(player, "judgment settings"));
+        player.setOp(true);
+        player.addAttachment(plugin, "judgment.admin", true);
+        assertTrue(server.dispatchCommand(player, "judgment pvp Explorer on"));
+        assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        assertTrue(server.dispatchCommand(player, "judgment pvp Explorer off"));
+        assertFalse(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        assertEquals(List.of("Explorer"), plugin.getCommand("judgment").tabComplete(player, "judgment", new String[]{"pvp", "E"}));
+        assertEquals(List.of("on", "off"), plugin.getCommand("judgment").tabComplete(player, "judgment", new String[]{"pvp", "Explorer", "o"}));
     }
 
     @Test void prefixesPreserveAndRestoreOriginalPresentation() {

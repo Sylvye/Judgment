@@ -74,6 +74,17 @@ public final class PvpService {
             : new Result(Outcome.STORAGE_ERROR, old.enabled(), 0);
     }
 
+    /** Administrator correction: deliberately bypasses player cooldown and combat waits. */
+    public Result adminSet(UUID id, boolean enabled) {
+        if (!initialize(id)) return new Result(Outcome.STORAGE_ERROR, savedEnabled(id), 0);
+        PvpState old = states.get(id);
+        if (old.enabled() == enabled) return new Result(Outcome.UNCHANGED, enabled, 0);
+        var updated = new HashMap<>(states);
+        updated.put(id, new PvpState(enabled, old.lastToggleMillis(), old.combatEndMillis(), old.opponents()));
+        return commit(updated) ? new Result(Outcome.CHANGED, enabled, 0)
+            : new Result(Outcome.STORAGE_ERROR, old.enabled(), 0);
+    }
+
     public void recordCombat(UUID a, UUID b, long durationMillis) {
         if (a.equals(b) || !initialize(a) || !initialize(b)) return;
         long now = clock.getAsLong();

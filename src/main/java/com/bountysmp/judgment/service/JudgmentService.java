@@ -88,6 +88,10 @@ public final class JudgmentService {
         return settings;
     }
 
+    public Plugin getPlugin() {
+        return plugin;
+    }
+
     public void recordPvpDamage(Player victim, Player attacker) {
         if (victim.getUniqueId().equals(attacker.getUniqueId()) || settings.combatTagMillis() <= 0L) {
             return;
