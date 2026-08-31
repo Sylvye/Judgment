@@ -6,3 +6,10 @@ punishment-mode: relog
 
 # Prompt timeout for clickable YES/NO choices.
 prompt-timeout-seconds: 10
+
+# Defaults apply only to players without saved preferences.
+pvp:
+  default-enabled: false
+  toggle-cooldown-seconds: 86400
+  # Counted after the final combat tag ends, including offline time.
+  post-combat-delay-seconds: 600

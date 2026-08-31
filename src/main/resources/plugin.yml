@@ -1,11 +1,14 @@
 name: Judgment
 version: ${version}
 main: com.bountysmp.judgment.JudgmentPlugin
-api-version: '1.21.11'
+api-version: '26.2'
 authors: [Sylvye]
 description: Survival-friendly combat log judgment system.
 softdepend: [LifeStealZ]
 commands:
+  pvp:
+    description: Toggle your PvP status.
+    usage: /pvp [on|off]
   judgment:
     description: Opens Judgment settings or handles combat log choices.
     usage: /judgment [settings|debug stack [player]]

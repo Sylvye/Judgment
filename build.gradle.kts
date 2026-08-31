@@ -2,27 +2,42 @@ plugins {
     java
 }
 
+val deployLocalPlugin by tasks.registering(Copy::class) {
+    description = "Copies Judgment to the local Minecraft server's plugins folder."
+    group = "build"
+    dependsOn(tasks.jar)
+    mustRunAfter(tasks.check)
+    from(tasks.jar.flatMap { it.archiveFile })
+    into(file("${System.getProperty("user.home")}/Documents/Minecraft localhost/plugins"))
+    // Keep one installed filename across plugin version changes.
+    rename { "Judgment.jar" }
+}
+
+tasks.build {
+    dependsOn(deployLocalPlugin)
+}
+
 group = "com.bountysmp"
-version = "0.1.0"
+version = "0.3.0"
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.120-stable")
 
-    testImplementation(platform("org.junit:junit-bom:5.13.1"))
+    testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
-    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.110.0")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.120-stable")
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.2:4.116.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks {
     compileJava {
         options.encoding = "UTF-8"
-        options.release.set(21)
+        options.release.set(25)
     }
 
     processResources {

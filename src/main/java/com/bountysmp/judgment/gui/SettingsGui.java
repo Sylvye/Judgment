@@ -2,6 +2,8 @@ package com.bountysmp.judgment.gui;
 
 import com.bountysmp.judgment.config.JudgmentSettings;
 import com.bountysmp.judgment.util.DurationParser;
+import com.bountysmp.judgment.pvp.PvpSettings;
+import java.util.function.Consumer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -23,6 +25,11 @@ public final class SettingsGui {
     private static final int MODE_SLOT = 13;
     private static final int PROMPT_TIMEOUT_SLOT = 16;
 
+    private static final int PVP_DEFAULT_SLOT = 20;
+    private static final int PVP_COOLDOWN_SLOT = 22;
+    private static final int PVP_DELAY_SLOT = 24;
+    private final Supplier<PvpSettings> pvpSettings;
+    private final Consumer<PvpSettings> pvpUpdater;
     private final Plugin plugin;
     private final Supplier<JudgmentSettings> settingsSupplier;
     private final LongConsumer combatTagUpdater;
@@ -33,8 +40,12 @@ public final class SettingsGui {
         Plugin plugin,
         Supplier<JudgmentSettings> settingsSupplier,
         LongConsumer combatTagUpdater,
-        LongConsumer promptTimeoutUpdater
+        LongConsumer promptTimeoutUpdater,
+        Supplier<PvpSettings> pvpSettings,
+        Consumer<PvpSettings> pvpUpdater
     ) {
+        this.pvpSettings = pvpSettings;
+        this.pvpUpdater = pvpUpdater;
         this.plugin = plugin;
         this.settingsSupplier = settingsSupplier;
         this.combatTagUpdater = combatTagUpdater;
@@ -68,6 +79,16 @@ public final class SettingsGui {
             List.of(Component.text("Click to edit in chat.", NamedTextColor.GRAY))
         ));
 
+        PvpSettings pvp = pvpSettings.get();
+        inventory.setItem(PVP_DEFAULT_SLOT, GuiItems.namedItem(Material.LEVER,
+            Component.text("Default PvP: " + (pvp.defaultEnabled() ? "ON" : "OFF"), NamedTextColor.RED),
+            List.of(Component.text("Click to toggle. Applies to new preferences only."))));
+        inventory.setItem(PVP_COOLDOWN_SLOT, GuiItems.namedItem(Material.CLOCK,
+            Component.text("PvP Toggle Cooldown: " + DurationParser.formatMillis(pvp.toggleCooldownMillis()), NamedTextColor.YELLOW),
+            List.of(Component.text("Click to edit in chat."))));
+        inventory.setItem(PVP_DELAY_SLOT, GuiItems.namedItem(Material.SHIELD,
+            Component.text("PvP Post-Combat Wait: " + DurationParser.formatMillis(pvp.postCombatDelayMillis()), NamedTextColor.GREEN),
+            List.of(Component.text("Starts when the last combat tag ends."), Component.text("Click to edit in chat."))));
         admin.openInventory(inventory);
     }
 
@@ -77,6 +98,18 @@ public final class SettingsGui {
             return;
         }
 
+        if (rawSlot == PVP_DEFAULT_SLOT) {
+            PvpSettings old = pvpSettings.get();
+            pvpUpdater.accept(new PvpSettings(!old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis()));
+            open(admin);
+            return;
+        }
+        if (rawSlot == PVP_COOLDOWN_SLOT || rawSlot == PVP_DELAY_SLOT) {
+            pendingInputs.put(admin.getUniqueId(), rawSlot == PVP_COOLDOWN_SLOT ? PendingInput.PVP_COOLDOWN : PendingInput.PVP_DELAY);
+            admin.closeInventory();
+            admin.sendMessage(Component.text("Type a duration like 0s, 10m, 24h, or cancel.", NamedTextColor.YELLOW));
+            return;
+        }
         if (rawSlot == COMBAT_TAG_SLOT) {
             pendingInputs.put(admin.getUniqueId(), PendingInput.COMBAT_TAG_DURATION);
             admin.closeInventory();
@@ -116,6 +149,15 @@ public final class SettingsGui {
                 return;
             }
 
+            if (!admin.isOnline() || !admin.hasPermission("judgment.admin")) return;
+            if (pendingInput == PendingInput.PVP_COOLDOWN || pendingInput == PendingInput.PVP_DELAY) {
+                PvpSettings old = pvpSettings.get();
+                pvpUpdater.accept(new PvpSettings(old.defaultEnabled(),
+                    pendingInput == PendingInput.PVP_COOLDOWN ? millis : old.toggleCooldownMillis(),
+                    pendingInput == PendingInput.PVP_DELAY ? millis : old.postCombatDelayMillis()));
+                admin.sendMessage(Component.text("Updated PvP settings.", NamedTextColor.GREEN));
+                open(admin);
+            }
             if (pendingInput == PendingInput.COMBAT_TAG_DURATION) {
                 combatTagUpdater.accept(millis);
                 admin.sendMessage(Component.text("Updated combat tag duration.", NamedTextColor.GREEN));
@@ -132,6 +174,8 @@ public final class SettingsGui {
 
     private enum PendingInput {
         COMBAT_TAG_DURATION,
-        PROMPT_TIMEOUT_DURATION
+        PROMPT_TIMEOUT_DURATION,
+        PVP_COOLDOWN,
+        PVP_DELAY
     }
 }

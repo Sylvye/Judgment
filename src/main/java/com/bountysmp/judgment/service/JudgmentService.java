@@ -44,6 +44,11 @@ public final class JudgmentService {
     private final Map<UUID, CombatTagStack> combatStacks = new ConcurrentHashMap<>();
     private final Map<String, CombatLogCase> openCases = new ConcurrentHashMap<>();
     private volatile JudgmentSettings settings;
+    private final java.util.Set<UUID> punishmentTargets = new java.util.HashSet<>();
+
+    public boolean isExecutingPunishment(UUID playerId) {
+        return punishmentTargets.contains(playerId);
+    }
 
     public JudgmentService(Plugin plugin, JudgmentSettings settings, PendingKillStore pendingKillStore, LongSupplier clock) {
         this(plugin, settings, pendingKillStore, clock, JudgmentService::executePlayerCausedKill, JudgmentService::executeUncreditedKill);
@@ -221,9 +226,15 @@ public final class JudgmentService {
         }
 
         Player killer = Bukkit.getPlayer(pending.get().killerId());
-        boolean killed = killer != null
-            ? punishmentExecutor.execute(offender, killer)
-            : uncreditedPunishmentExecutor.execute(offender);
+        boolean killed;
+        punishmentTargets.add(offenderId);
+        try {
+            killed = killer != null
+                ? punishmentExecutor.execute(offender, killer)
+                : uncreditedPunishmentExecutor.execute(offender);
+        } finally {
+            punishmentTargets.remove(offenderId);
+        }
         if (!killed) {
             return false;
         }

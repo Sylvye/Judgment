@@ -32,8 +32,8 @@ public final class DurationParser {
             if (amount < 0) {
                 return null;
             }
-            return amount * multiplier;
-        } catch (NumberFormatException exception) {
+            return Math.multiplyExact(amount, multiplier);
+        } catch (NumberFormatException | ArithmeticException exception) {
             return null;
         }
     }
