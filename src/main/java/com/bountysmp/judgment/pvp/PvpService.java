@@ -12,23 +12,46 @@ import java.util.logging.Logger;
 
 /** Access on the server thread. All eligibility timestamps are wall-clock milliseconds. */
 public final class PvpService {
-    public enum Outcome { CHANGED, UNCHANGED, WAIT, STORAGE_ERROR }
+    public enum Outcome { CHANGED, UNCHANGED, WAIT, STORAGE_ERROR, HOLDING_DRAGON_EGG, END_DIMENSION, NETHER_DIMENSION }
     public record Result(Outcome outcome, boolean enabled, long waitMillis) {}
 
     private final PvpStore store;
     private final Supplier<PvpSettings> settings;
     private final LongSupplier clock;
     private final Predicate<UUID> activelyTagged;
+    private final Predicate<UUID> holdingDragonEgg;
+    private final Predicate<UUID> inEndDimension;
+    private final Predicate<UUID> inNetherDimension;
     private final Logger logger;
     private Map<UUID, PvpState> states;
     private boolean storageHealthy = true;
 
     public PvpService(PvpStore store, Supplier<PvpSettings> settings, LongSupplier clock,
                       Predicate<UUID> activelyTagged, Logger logger) {
+        this(store, settings, clock, activelyTagged, ignored -> false, ignored -> false, ignored -> false, logger);
+    }
+
+    public PvpService(PvpStore store, Supplier<PvpSettings> settings, LongSupplier clock,
+                      Predicate<UUID> activelyTagged, Predicate<UUID> holdingDragonEgg, Logger logger) {
+        this(store, settings, clock, activelyTagged, holdingDragonEgg, ignored -> false, ignored -> false, logger);
+    }
+
+    public PvpService(PvpStore store, Supplier<PvpSettings> settings, LongSupplier clock,
+                      Predicate<UUID> activelyTagged, Predicate<UUID> holdingDragonEgg,
+                      Predicate<UUID> inEndDimension, Logger logger) {
+        this(store, settings, clock, activelyTagged, holdingDragonEgg, inEndDimension, ignored -> false, logger);
+    }
+
+    public PvpService(PvpStore store, Supplier<PvpSettings> settings, LongSupplier clock,
+                      Predicate<UUID> activelyTagged, Predicate<UUID> holdingDragonEgg,
+                      Predicate<UUID> inEndDimension, Predicate<UUID> inNetherDimension, Logger logger) {
         this.store = store;
         this.settings = settings;
         this.clock = clock;
         this.activelyTagged = activelyTagged;
+        this.holdingDragonEgg = holdingDragonEgg;
+        this.inEndDimension = inEndDimension;
+        this.inNetherDimension = inNetherDimension;
         this.logger = logger;
         try {
             states = store.load();
@@ -60,6 +83,13 @@ public final class PvpService {
         PvpState old = states.get(id);
         boolean enabled = requested == null ? !old.enabled() : requested;
         if (enabled == old.enabled()) return new Result(Outcome.UNCHANGED, enabled, 0);
+        if (holdingDragonEgg.test(id)) return new Result(Outcome.HOLDING_DRAGON_EGG, old.enabled(), 0);
+        if (settings.get().preventToggleInEnd() && inEndDimension.test(id)) {
+            return new Result(Outcome.END_DIMENSION, old.enabled(), 0);
+        }
+        if (settings.get().preventToggleInNether() && inNetherDimension.test(id)) {
+            return new Result(Outcome.NETHER_DIMENSION, old.enabled(), 0);
+        }
         long now = clock.getAsLong();
         long wait = remaining(old.lastToggleMillis(), settings.get().toggleCooldownMillis(), now);
         if (!enabled) {

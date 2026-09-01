@@ -13,12 +13,22 @@ val deployLocalPlugin by tasks.registering(Copy::class) {
     rename { "Judgment.jar" }
 }
 
+val deployTigerMceTestServerPlugin by tasks.registering(Copy::class) {
+    description = "Copies Judgment to the TigerMCE test server's plugins folder."
+    group = "build"
+    dependsOn(tasks.jar)
+    mustRunAfter(tasks.check)
+    from(tasks.jar.flatMap { it.archiveFile })
+    into(file("${System.getProperty("user.home")}/Documents/TigerMCE Test Server/plugins"))
+    rename { "Judgment.jar" }
+}
+
 tasks.build {
-    dependsOn(deployLocalPlugin)
+    dependsOn(deployLocalPlugin, deployTigerMceTestServerPlugin)
 }
 
 group = "com.bountysmp"
-version = "0.3.0"
+version = "0.4.0"
 
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(25))

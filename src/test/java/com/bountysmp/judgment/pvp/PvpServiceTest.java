@@ -19,6 +19,8 @@ class PvpServiceTest {
     final UUID a = UUID.randomUUID(), b = UUID.randomUUID(), c = UUID.randomUUID();
     final AtomicLong now = new AtomicLong(1_000);
     final AtomicBoolean active = new AtomicBoolean();
+    final AtomicBoolean inEnd = new AtomicBoolean();
+    final AtomicBoolean inNether = new AtomicBoolean();
     final AtomicReference<PvpSettings> settings = new AtomicReference<>(new PvpSettings(false, 86_400_000, 600_000));
     PvpStore store;
     PvpService service;
@@ -29,7 +31,8 @@ class PvpServiceTest {
     }
 
     PvpService reopen() {
-        return new PvpService(store, settings::get, now::get, id -> active.get(), Logger.getAnonymousLogger());
+        return new PvpService(store, settings::get, now::get, id -> active.get(), ignored -> false,
+            id -> inEnd.get(), id -> inNether.get(), Logger.getAnonymousLogger());
     }
 
     @Test void firstChangeIsImmediateAndBothDirectionsShareCooldown() {
@@ -167,5 +170,23 @@ class PvpServiceTest {
         config.set("pvp.toggle-cooldown-seconds", Double.POSITIVE_INFINITY);
         config.set("pvp.post-combat-delay-seconds", -1);
         assertEquals(new PvpSettings(false, 86_400_000, 600_000), PvpSettings.fromConfig(config, Logger.getAnonymousLogger()));
+    }
+
+    @Test void configuredEndLockPreventsOnlyActualStatusChanges() {
+        settings.set(new PvpSettings(false, 0, 0, true));
+        inEnd.set(true);
+        assertEquals(PvpService.Outcome.UNCHANGED, service.change(a, false).outcome());
+        assertEquals(PvpService.Outcome.END_DIMENSION, service.change(a, true).outcome());
+        inEnd.set(false);
+        assertEquals(PvpService.Outcome.CHANGED, service.change(a, true).outcome());
+    }
+
+    @Test void configuredNetherLockPreventsOnlyActualStatusChanges() {
+        settings.set(new PvpSettings(false, 0, 0, false, true));
+        inNether.set(true);
+        assertEquals(PvpService.Outcome.UNCHANGED, service.change(a, false).outcome());
+        assertEquals(PvpService.Outcome.NETHER_DIMENSION, service.change(a, true).outcome());
+        assertEquals(PvpService.Outcome.CHANGED, service.adminSet(a, true).outcome());
+        assertTrue(service.isPvpEnabled(a));
     }
 }

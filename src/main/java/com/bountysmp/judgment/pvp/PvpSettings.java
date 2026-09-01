@@ -3,11 +3,24 @@ package com.bountysmp.judgment.pvp;
 import org.bukkit.configuration.file.FileConfiguration;
 import java.util.logging.Logger;
 
-public record PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis) {
+public record PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
+                          boolean preventToggleInEnd, boolean preventToggleInNether) {
+    /** Backwards-compatible constructor for modules that do not configure the End lock. */
+    public PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis) {
+        this(defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, false, false);
+    }
+
+    public PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
+                       boolean preventToggleInEnd) {
+        this(defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, preventToggleInEnd, false);
+    }
+
     public static PvpSettings fromConfig(FileConfiguration config, Logger logger) {
         return new PvpSettings(config.getBoolean("pvp.default-enabled", false),
             duration(config, "pvp.toggle-cooldown-seconds", 86_400L, logger),
-            duration(config, "pvp.post-combat-delay-seconds", 600L, logger));
+            duration(config, "pvp.post-combat-delay-seconds", 600L, logger),
+            config.getBoolean("pvp.prevent-toggle-in-end", false),
+            config.getBoolean("pvp.prevent-toggle-in-nether", false));
     }
 
     private static long duration(FileConfiguration config, String key, long fallback, Logger logger) {

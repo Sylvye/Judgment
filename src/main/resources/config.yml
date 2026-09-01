@@ -24,9 +24,11 @@ combat-item-cooldowns:
   mace-smash: 0
   riptide: 0
   lunge: 0
+  tnt: 0
+  tnt-minecarts: 0
+  beds: 0
   end-crystals: 0
   respawn-anchors: 0
-  tnt-minecarts: 0
 
 # Where each item rule applies: "pvp" while combat tagged, or "global" everywhere.
 combat-item-scopes:
@@ -36,9 +38,19 @@ combat-item-scopes:
   mace-smash: pvp
   riptide: pvp
   lunge: pvp
+  tnt: pvp
+  tnt-minecarts: pvp
+  beds: pvp
   end-crystals: pvp
   respawn-anchors: pvp
-  tnt-minecarts: pvp
+
+# Global multipliers for player health damage. Block damage and knockback are unchanged.
+combat-item-damage-modifiers:
+  tnt: 1.0
+  tnt-minecarts: 1.0
+  beds: 1.0
+  respawn-anchors: 1.0
+  end-crystals: 1.0
 
 # Defaults apply only to players without saved preferences.
 pvp:
@@ -46,6 +58,10 @@ pvp:
   toggle-cooldown-seconds: 86400
   # Counted after the final combat tag ends, including offline time.
   post-combat-delay-seconds: 600
+  # Prevent players from changing PvP status while in the End dimension.
+  prevent-toggle-in-end: false
+  # Prevent players from changing PvP status while in the Nether dimension.
+  prevent-toggle-in-nether: false
   dragon-egg:
     # Disabled until an administrator enables the privilege.
     enabled: false

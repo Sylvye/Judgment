@@ -17,4 +17,13 @@ class CombatItemInputTest {
         assertNull(SettingsGui.parseCombatItemSeconds("Infinity"));
         assertNull(SettingsGui.parseCombatItemSeconds("later"));
     }
+
+    @Test void validatesExplosiveDamageModifiers() {
+        assertEquals(0.0, SettingsGui.parseDamageModifier("0"));
+        assertEquals(0.5, SettingsGui.parseDamageModifier("0.5"));
+        assertEquals(12.0, SettingsGui.parseDamageModifier("12"));
+        assertNull(SettingsGui.parseDamageModifier("-0.1"));
+        assertNull(SettingsGui.parseDamageModifier("NaN"));
+        assertNull(SettingsGui.parseDamageModifier("Infinity"));
+    }
 }

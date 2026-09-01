@@ -1,11 +1,19 @@
 package com.bountysmp.judgment.pvp;
 
 import com.bountysmp.judgment.JudgmentPlugin;
+import com.bountysmp.judgment.gui.CombatItemMenuHolder;
+import com.bountysmp.judgment.gui.CombatLogMenuHolder;
+import com.bountysmp.judgment.gui.DragonEggMenuHolder;
+import com.bountysmp.judgment.gui.PvpTagsMenuHolder;
+import com.bountysmp.judgment.gui.SettingsMenuHolder;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.scoreboard.Team;
+import org.bukkit.World;
 import org.bukkit.event.inventory.*;
+import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
+import org.bukkit.inventory.ItemStack;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import io.papermc.paper.chat.ChatRenderer;
 import java.util.HashSet;
@@ -13,6 +21,7 @@ import org.junit.jupiter.api.*;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
+import org.mockbukkit.mockbukkit.world.WorldMock;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -34,6 +43,10 @@ class PvpIntegrationTest {
         assertFalse(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
         assertTrue(server.dispatchCommand(player, "pvp on"));
         assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        player.getInventory().setItem(0, new org.bukkit.inventory.ItemStack(org.bukkit.Material.DRAGON_EGG));
+        assertTrue(server.dispatchCommand(player, "pvp off"));
+        assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        player.getInventory().clear();
         assertTrue(server.dispatchCommand(player, "pvp off"));
         assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
         assertEquals(List.of("on", "off"), plugin.getCommand("pvp").tabComplete(player, "pvp", new String[]{""}));
@@ -78,27 +91,40 @@ class PvpIntegrationTest {
         assertEquals("[Builder] ", plain(original.prefix()));
     }
 
-    @Test void adminGuiEditsAllPvpSettingsAndTurningOffRemovesPrefixes() {
+    @Test void onlyPvpEnabledPlayersCanPickupTheDragonEgg() {
+        org.bukkit.entity.Item egg = player.getWorld().dropItem(player.getLocation(), new ItemStack(org.bukkit.Material.DRAGON_EGG));
+        PlayerAttemptPickupItemEvent blocked = new PlayerAttemptPickupItemEvent(player, egg);
+        server.getPluginManager().callEvent(blocked);
+        assertTrue(blocked.isCancelled());
+        assertFalse(blocked.getFlyAtPlayer());
+
+        assertTrue(server.dispatchCommand(player, "pvp on"));
+        PlayerAttemptPickupItemEvent allowed = new PlayerAttemptPickupItemEvent(player, egg);
+        server.getPluginManager().callEvent(allowed);
+        assertFalse(allowed.isCancelled());
+    }
+
+    @Test void adminGuiNavigatesModulesEditsSettingsAndReturnsToTheCorrectMenu() {
         player.setOp(true);
         server.dispatchCommand(player, "judgment");
-        assertNotNull(player.getOpenInventory().getTopInventory().getItem(10));
-        assertNotNull(player.getOpenInventory().getTopInventory().getItem(12));
-        assertNotNull(player.getOpenInventory().getTopInventory().getItem(14));
-        assertNotNull(player.getOpenInventory().getTopInventory().getItem(21));
-        assertNotNull(player.getOpenInventory().getTopInventory().getItem(23));
-        click(21);
-        assertEquals(45, player.getOpenInventory().getTopInventory().getSize());
-        for (int slot : new int[] {11, 13, 15, 20, 22, 24, 29, 31, 33, 40})
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof SettingsMenuHolder);
+        for (int slot : new int[] {10, 12, 14, 16})
             assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
-        click(11, ClickType.RIGHT);
-        assertEquals("global", plugin.getConfig().getString("combat-item-scopes.elytra"));
-        click(11, ClickType.RIGHT);
-        assertEquals("pvp", plugin.getConfig().getString("combat-item-scopes.elytra"));
-        click(40);
-        click(23);
-        for (int slot : new int[] {10, 12, 14, 16, 22})
+
+        click(10);
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof CombatLogMenuHolder);
+        for (int slot : new int[] {10, 12, 14, 16, 22, 26})
             assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
-        click(22);
+        click(10);
+        chat("45s");
+        assertEquals(45, plugin.getConfig().getDouble("combat-tag-seconds"));
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof CombatLogMenuHolder);
+        click(26);
+
+        click(12);
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof PvpTagsMenuHolder);
+        for (int slot : new int[] {10, 12, 14, 16, 22, 26})
+            assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
         click(10);
         assertTrue(plugin.getConfig().getBoolean("pvp.default-enabled"));
         assertFalse(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
@@ -107,9 +133,45 @@ class PvpIntegrationTest {
         assertEquals(86400, plugin.getConfig().getDouble("pvp.toggle-cooldown-seconds"));
         chat("0s");
         assertEquals(0, plugin.getConfig().getDouble("pvp.toggle-cooldown-seconds"));
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof PvpTagsMenuHolder);
         click(14);
         chat("5m");
         assertEquals(300, plugin.getConfig().getDouble("pvp.post-combat-delay-seconds"));
+        click(16);
+        assertTrue(plugin.getConfig().getBoolean("pvp.prevent-toggle-in-end"));
+        click(22);
+        assertTrue(plugin.getConfig().getBoolean("pvp.prevent-toggle-in-nether"));
+        click(26);
+
+        click(14);
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof CombatItemMenuHolder);
+        assertEquals(54, player.getOpenInventory().getTopInventory().getSize());
+        for (int slot : new int[] {4, 9, 11, 12, 13, 14, 15, 16, 27, 29, 30, 31, 32, 33, 49})
+            assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
+        click(11, ClickType.RIGHT);
+        assertEquals("global", plugin.getConfig().getString("combat-item-scopes.elytra"));
+        click(11, ClickType.RIGHT);
+        assertEquals("pvp", plugin.getConfig().getString("combat-item-scopes.elytra"));
+        click(29, ClickType.SHIFT_LEFT);
+        chat("0.5");
+        assertEquals(0.5, plugin.getConfig().getDouble("combat-item-damage-modifiers.tnt"));
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof CombatItemMenuHolder);
+        click(49);
+
+        click(16);
+        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof DragonEggMenuHolder);
+        for (int slot : new int[] {10, 12, 14, 16, 26})
+            assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
+        click(26);
+
+        WorldMock world = (WorldMock) player.getWorld();
+        world.setEnvironment(World.Environment.THE_END);
+        server.dispatchCommand(player, "pvp on");
+        assertFalse(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        world.setEnvironment(World.Environment.NETHER);
+        server.dispatchCommand(player, "pvp on");
+        assertFalse(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        world.setEnvironment(World.Environment.NORMAL);
         server.dispatchCommand(player, "pvp on");
         assertTrue(plain(player.playerListName()).startsWith("[PvP] "));
         server.dispatchCommand(player, "pvp off");

@@ -116,6 +116,7 @@ public final class CombatItemCooldownManager {
     }
 
     public CombatItemScope scope(CombatItemAction action) { return settings.get().scope(action); }
+    public double damageModifier(CombatItemAction action) { return settings.get().damageModifier(action); }
 
     Map<UUID, Map<CombatItemAction, Long>> snapshot() {
         Map<UUID, Map<CombatItemAction, Long>> copy = new HashMap<>();

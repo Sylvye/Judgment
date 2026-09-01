@@ -50,9 +50,19 @@ public class JudgmentPlugin extends JavaPlugin {
         combatItemSettings = CombatItemSettings.fromConfig(getConfig(), getLogger());
         pvpService = new PvpService(new PvpStore(getDataFolder().toPath().resolve("pvp-players.yml")),
             () -> pvpSettings, System::currentTimeMillis,
-            id -> judgmentService.getCombatTag(id).isPresent(), getLogger());
+            id -> judgmentService.getCombatTag(id).isPresent(),
+            id -> {
+                org.bukkit.entity.Player player = getServer().getPlayer(id);
+                return player != null && dragonEggPrivilegeHasEgg(player);
+            }, id -> {
+                org.bukkit.entity.Player player = getServer().getPlayer(id);
+                return player != null && player.getWorld().getEnvironment() == org.bukkit.World.Environment.THE_END;
+            }, id -> {
+                org.bukkit.entity.Player player = getServer().getPlayer(id);
+                return player != null && player.getWorld().getEnvironment() == org.bukkit.World.Environment.NETHER;
+            }, getLogger());
         pvpPresentation = new PvpPresentation(pvpService);
-        dragonEggPrivilege = new DragonEggPrivilege(this, () -> dragonEggSettings);
+        dragonEggPrivilege = new DragonEggPrivilege(this, pvpService, () -> dragonEggSettings);
         combatItemCooldownManager = new CombatItemCooldownManager(
             new CombatItemCooldownStore(getDataFolder().toPath().resolve("combat-item-cooldowns.yml")),
             () -> combatItemSettings, id -> judgmentService.getCombatTag(id).isPresent(),
@@ -61,6 +71,7 @@ public class JudgmentPlugin extends JavaPlugin {
             this::setInvisibleKillerObfuscation,
             () -> pvpSettings, this::setPvpSettings, () -> dragonEggSettings, this::setDragonEggSettings,
             () -> combatItemSettings, this::setCombatItemSetting, this::setCombatItemScope,
+            this::setCombatItemDamageModifier,
             this::setItemCooldownBossBars, this::setCombatTimerBossBar);
         PvpCommand pvpCommand = new PvpCommand(pvpService, player -> pvpPresentation.refreshAll());
         PluginCommand pvp = Objects.requireNonNull(getCommand("pvp"), "pvp command missing from plugin.yml");
@@ -105,6 +116,8 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set("pvp.default-enabled", updated.defaultEnabled());
         getConfig().set("pvp.toggle-cooldown-seconds", updated.toggleCooldownMillis() / 1_000.0);
         getConfig().set("pvp.post-combat-delay-seconds", updated.postCombatDelayMillis() / 1_000.0);
+        getConfig().set("pvp.prevent-toggle-in-end", updated.preventToggleInEnd());
+        getConfig().set("pvp.prevent-toggle-in-nether", updated.preventToggleInNether());
         saveConfig();
     }
 
@@ -116,6 +129,12 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set("pvp.dragon-egg.effects.speed", updated.speed());
         saveConfig();
         if (dragonEggPrivilege != null) for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
+    }
+
+    private boolean dragonEggPrivilegeHasEgg(org.bukkit.entity.Player player) {
+        return java.util.Arrays.stream(player.getInventory().getContents())
+            .filter(java.util.Objects::nonNull)
+            .anyMatch(item -> item.getType() == org.bukkit.Material.DRAGON_EGG && item.getAmount() > 0);
     }
 
     private void reloadJudgmentSettings() {
@@ -156,6 +175,12 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set(CombatItemSettings.SCOPE_CONFIG_ROOT + "." + action.configKey(), scope.configValue());
         saveConfig();
         combatItemCooldownManager.scopeChanged(action);
+    }
+
+    private void setCombatItemDamageModifier(CombatItemAction action, Double modifier) {
+        combatItemSettings = combatItemSettings.withDamageModifier(action, modifier);
+        getConfig().set(CombatItemSettings.DAMAGE_MODIFIER_CONFIG_ROOT + "." + action.configKey(), modifier);
+        saveConfig();
     }
 
     private void setItemCooldownBossBars(boolean enabled) {

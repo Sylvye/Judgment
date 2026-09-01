@@ -15,7 +15,8 @@ Judgment declares `softdepend: [LifeStealZ]`. When the credited player is online
 ## PvP Status
 
 `/pvp` toggles PvP; `/pvp on` and `/pvp off` set it explicitly. Everyone can use
-these commands. Both players must have PvP **ON** to fight. New preferences default
+these commands. A player carrying a dragon egg cannot change their PvP status until
+the egg is no longer in their inventory. Both players must have PvP **ON** to fight. New preferences default
 to **OFF**; admins can change that default without changing existing saved statuses.
 The first change is immediately available unless combat prevents disabling.
 
@@ -38,13 +39,15 @@ environmental damage, and untraceable traps (such as placed lava) are unchanged.
 This is not a general anti-grief system. Approved Judgment punishments still execute
 regardless of PvP status and do not start new combat tags.
 
-Use `/judgment` or `/judgment settings` to open the settings menu and change the default status, toggle cooldown, and
-post-combat wait. Duration changes affect existing waits. Enter `24h`, `10m`, or `0s`
+Use `/judgment` or `/judgment settings` to open the modular settings menu. The PvP Tags
+module controls the default status, toggle cooldown, post-combat wait, and optional End
+and Nether toggle locks. Duration changes affect existing waits. Enter `24h`, `10m`, or `0s`
 (to disable a delay); active combat always prevents disabling PvP.
 
-The **Combat Item Rules** submenu controls elytra entry, elytra firework boosts,
-ender pearls, mace smashes, riptide, spear lunges, end crystal placement, respawn
-anchor placement, and TNT minecart placement while combat tagged. Each rule accepts
+The **Combat Rules** submenu separates managed items and abilities from explosives. It
+controls elytra entry, elytra firework boosts, ender pearls, mace smashes, riptide,
+spear lunges, and placement of TNT, TNT minecarts, beds, respawn anchors, and end
+crystals. Each rule accepts
 `-1` to ban the action, `0` for unrestricted use (the default), or a positive decimal
 number of cooldown seconds. Leaving combat, dying, disconnecting, or restarting the
 server clears active PvP-only item cooldowns. Optional settings show the combat timer and
@@ -54,6 +57,11 @@ Each item rule also has a scope. `PVP ONLY` applies while combat tagged and clea
 timer on combat exit. `GLOBAL` applies everywhere and persists its timer through
 reconnects and restarts. In the item grid, left-click edits the cooldown and right-click
 toggles the scope.
+
+Every explosive also has a global player-damage multiplier. Shift-left-click its GUI
+item to edit it: `0` removes player health damage, `0.5` halves it, `1` keeps vanilla
+damage, and values above `1` amplify it. Mob damage, explosion knockback, and block
+damage are unchanged.
 
 Player preferences and combat timing are stored by UUID in `plugins/Judgment/pvp-players.yml`.
 Do not delete this file when upgrading. If loading or saving fails, PvP attacks and
@@ -65,8 +73,9 @@ Future modules can use `JudgmentPlugin#getPvpService()`, `isPvpEnabled(UUID)`, a
 
 ### Dragon Egg Privilege
 
-The administrator settings menu has a `Dragon Egg` sub-menu. The privilege is off by
-default. When enabled, a player carrying a dragon egg receives whichever effects are
+Players with PvP disabled cannot pick up a dropped dragon egg. The administrator settings
+menu also has a `Dragon Egg` sub-menu. The privilege is off by default. When enabled, a
+player with PvP enabled who carries a dragon egg receives whichever effects are
 enabled there: Glow, Strength I, and Speed I. Effects are permanent while the egg is
 held and are removed when the player no longer has one. The plugin marks only its own
 effects, so unrelated potion effects are preserved. This privilege is cosmetic and
@@ -137,11 +146,10 @@ Opens the admin settings GUI.
 
 Editable settings:
 
-- Combat tag duration
-- Prompt timeout
-- Default PvP status for new preferences
-- PvP toggle cooldown
-- PvP post-combat wait
+- **CombatLog:** combat tag duration, prompt timeout, combat timer boss bar, and invisible-killer masking
+- **PvP Tags:** default status, toggle cooldown, post-combat wait, End lock, and Nether lock
+- **Combat Rules:** cooldown boss bars, per-rule cooldowns/bans/scopes, and explosive player-damage modifiers
+- **Dragon Egg:** privilege and individual effect toggles
 
 Displayed but locked for now:
 
@@ -199,9 +207,11 @@ combat-item-cooldowns:
   mace-smash: 0
   riptide: 0
   lunge: 0
+  tnt: 0
+  tnt-minecarts: 0
+  beds: 0
   end-crystals: 0
   respawn-anchors: 0
-  tnt-minecarts: 0
 combat-item-scopes:
   elytra: pvp
   fireworks: pvp
@@ -209,13 +219,23 @@ combat-item-scopes:
   mace-smash: pvp
   riptide: pvp
   lunge: pvp
+  tnt: pvp
+  tnt-minecarts: pvp
+  beds: pvp
   end-crystals: pvp
   respawn-anchors: pvp
-  tnt-minecarts: pvp
+combat-item-damage-modifiers:
+  tnt: 1.0
+  tnt-minecarts: 1.0
+  beds: 1.0
+  respawn-anchors: 1.0
+  end-crystals: 1.0
 pvp:
   default-enabled: false
   toggle-cooldown-seconds: 86400
   post-combat-delay-seconds: 600
+  prevent-toggle-in-end: false
+  prevent-toggle-in-nether: false
 ```
 
 ### `combat-tag-seconds`
@@ -252,12 +272,12 @@ Windows:
 The plugin jar is created under:
 
 ```text
-build/libs/Judgment-0.3.0.jar
+build/libs/Judgment-0.4.0.jar
 ```
 
-Every successful `build` also copies the plugin to
-`~/Documents/Minecraft localhost/plugins/Judgment.jar`, replacing that file on
-subsequent builds. Restart the local server to load the updated plugin.
+Every successful `build` also replaces `Judgment.jar` in both
+`~/Documents/Minecraft localhost/plugins/` and
+`~/Documents/TigerMCE Test Server/plugins/`. Restart the server to load the updated plugin.
 
 To update, stop your Paper 26.2 server, replace the old Judgment jar in `plugins/`
 with this jar, and restart. Keep the existing `plugins/Judgment/` folder to preserve
@@ -275,3 +295,4 @@ For an in-game check after restarting Paper, connect two clients and verify:
 3. Use shortened admin delays to check combat expiry, death, and disabling.
 4. Check red prefix lettering above players and in tab, with no duplicated prefix.
 5. Reconnect/restart and confirm saved status and waits; check normal PvE damage.
+6. Check TNT, minecart, bed, anchor, and crystal placement rules and player-damage modifiers.

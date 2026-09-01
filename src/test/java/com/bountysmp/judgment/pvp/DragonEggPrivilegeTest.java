@@ -15,19 +15,23 @@ class DragonEggPrivilegeTest {
     PlayerMock player;
     AtomicReference<DragonEggSettings> settings;
     DragonEggPrivilege privilege;
+    PvpService pvp;
 
     @BeforeEach void setup() {
         MockBukkit.mock();
         plugin = MockBukkit.createMockPlugin();
         player = MockBukkit.getMock().addPlayer("Hunter");
         settings = new AtomicReference<>(new DragonEggSettings(true, true, true, true));
-        privilege = new DragonEggPrivilege(plugin, settings::get);
+        pvp = new PvpService(new PvpStore(java.nio.file.Path.of("build/test-pvp.yml")),
+            () -> new PvpSettings(true, 0, 0), System::currentTimeMillis, ignored -> false, plugin.getLogger());
+        privilege = new DragonEggPrivilege(plugin, pvp, settings::get);
     }
 
     @AfterEach void cleanup() { MockBukkit.unmock(); }
 
     @Test void enabledHolderReceivesConfiguredPermanentEffects() {
         player.getInventory().setItem(0, new org.bukkit.inventory.ItemStack(Material.DRAGON_EGG));
+        pvp.change(player.getUniqueId(), true);
         privilege.refresh(player);
         assertTrue(player.hasPotionEffect(org.bukkit.potion.PotionEffectType.GLOWING));
         assertEquals(0, player.getPotionEffect(org.bukkit.potion.PotionEffectType.STRENGTH).getAmplifier());
@@ -36,6 +40,7 @@ class DragonEggPrivilegeTest {
 
     @Test void effectsAreRemovedWhenEggIsLostAndUnrelatedEffectsRemain() {
         player.getInventory().setItem(0, new org.bukkit.inventory.ItemStack(Material.DRAGON_EGG));
+        pvp.change(player.getUniqueId(), true);
         player.addPotionEffect(new org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.JUMP_BOOST, 400, 1));
         privilege.refresh(player);
         player.getInventory().clear();
@@ -47,12 +52,22 @@ class DragonEggPrivilegeTest {
 
     @Test void featureAndIndividualEffectsCanBeDisabled() {
         player.getInventory().setItem(0, new org.bukkit.inventory.ItemStack(Material.DRAGON_EGG));
+        pvp.change(player.getUniqueId(), true);
         settings.set(new DragonEggSettings(false, true, true, true));
         privilege.refresh(player);
         assertFalse(player.hasPotionEffect(org.bukkit.potion.PotionEffectType.GLOWING));
         settings.set(new DragonEggSettings(true, false, true, false));
         privilege.refresh(player);
         assertTrue(player.hasPotionEffect(org.bukkit.potion.PotionEffectType.STRENGTH));
+        assertFalse(player.hasPotionEffect(org.bukkit.potion.PotionEffectType.SPEED));
+    }
+
+    @Test void pvpDisabledPlayersDoNotReceiveThePrivilege() {
+        player.getInventory().setItem(0, new org.bukkit.inventory.ItemStack(Material.DRAGON_EGG));
+        pvp.change(player.getUniqueId(), false);
+        privilege.refresh(player);
+        assertFalse(player.hasPotionEffect(org.bukkit.potion.PotionEffectType.GLOWING));
+        assertFalse(player.hasPotionEffect(org.bukkit.potion.PotionEffectType.STRENGTH));
         assertFalse(player.hasPotionEffect(org.bukkit.potion.PotionEffectType.SPEED));
     }
 }

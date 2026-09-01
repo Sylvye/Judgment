@@ -6,20 +6,28 @@ import io.papermc.paper.event.entity.EntityLungeEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.damage.DamageType;
+import org.bukkit.Location;
+import org.bukkit.Tag;
+import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderPearl;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TNTPrimed;
 import org.bukkit.entity.minecart.ExplosiveMinecart;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.player.PlayerRiptideEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.block.Action;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.util.Vector;
 
@@ -32,6 +40,7 @@ public final class CombatItemListener implements Listener {
     private final CombatItemCooldownManager cooldowns;
     private final Plugin plugin;
     private final Map<NoticeKey, Long> lastNotices = new HashMap<>();
+    private final Map<BlockPosition, CombatItemAction> imminentBlockExplosions = new HashMap<>();
 
     public CombatItemListener(Plugin plugin, CombatItemCooldownManager cooldowns) {
         this.plugin = plugin;
@@ -97,8 +106,35 @@ public final class CombatItemListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
-        if (event.getBlockPlaced().getType() == org.bukkit.Material.RESPAWN_ANCHOR)
+        org.bukkit.Material type = event.getBlockPlaced().getType();
+        if (type == org.bukkit.Material.TNT) enforce(event.getPlayer(), CombatItemAction.TNT, event);
+        else if (Tag.BEDS.isTagged(type)) enforce(event.getPlayer(), CombatItemAction.BEDS, event);
+        else if (type == org.bukkit.Material.RESPAWN_ANCHOR)
             enforce(event.getPlayer(), CombatItemAction.RESPAWN_ANCHORS, event);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void trackBadRespawnInteraction(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
+        Block block = event.getClickedBlock();
+        CombatItemAction action = badRespawnAction(block, event.getPlayer().getWorld().getEnvironment());
+        if (action != null) rememberBlockExplosion(block, action);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void trackBadRespawnExplosion(BlockExplodeEvent event) {
+        org.bukkit.Material type = event.getExplodedBlockState().getType();
+        CombatItemAction action = Tag.BEDS.isTagged(type) ? CombatItemAction.BEDS
+            : type == org.bukkit.Material.RESPAWN_ANCHOR ? CombatItemAction.RESPAWN_ANCHORS : null;
+        if (action != null) rememberBlockExplosion(event.getBlock(), action);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void modifyExplosivePlayerDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player)) return;
+        CombatItemAction action = explosiveAction(event);
+        if (action == null) return;
+        event.setDamage(event.getDamage() * cooldowns.damageModifier(action));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -109,6 +145,38 @@ public final class CombatItemListener implements Listener {
     private static void stopRiptide(Player player, Vector priorVelocity) {
         player.setRiptiding(false);
         player.setVelocity(priorVelocity);
+    }
+
+    private CombatItemAction explosiveAction(EntityDamageEvent event) {
+        org.bukkit.entity.Entity direct = event.getDamageSource().getDirectEntity();
+        org.bukkit.entity.Entity causing = event.getDamageSource().getCausingEntity();
+        CombatItemAction entityAction = explosiveEntityAction(direct);
+        if (entityAction == null) entityAction = explosiveEntityAction(causing);
+        if (entityAction != null) return entityAction;
+        if (!event.getDamageSource().getDamageType().equals(DamageType.BAD_RESPAWN_POINT)) return null;
+        Location source = event.getDamageSource().getSourceLocation();
+        return source == null ? null : imminentBlockExplosions.get(BlockPosition.from(source));
+    }
+
+    private static CombatItemAction explosiveEntityAction(org.bukkit.entity.Entity entity) {
+        if (entity instanceof TNTPrimed) return CombatItemAction.TNT;
+        if (entity instanceof ExplosiveMinecart) return CombatItemAction.TNT_MINECARTS;
+        if (entity instanceof EnderCrystal) return CombatItemAction.END_CRYSTALS;
+        return null;
+    }
+
+    private static CombatItemAction badRespawnAction(Block block, World.Environment environment) {
+        if (Tag.BEDS.isTagged(block.getType()) && environment != World.Environment.NORMAL)
+            return CombatItemAction.BEDS;
+        if (block.getType() == org.bukkit.Material.RESPAWN_ANCHOR && environment != World.Environment.NETHER)
+            return CombatItemAction.RESPAWN_ANCHORS;
+        return null;
+    }
+
+    private void rememberBlockExplosion(Block block, CombatItemAction action) {
+        BlockPosition position = BlockPosition.from(block.getLocation());
+        imminentBlockExplosions.put(position, action);
+        org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> imminentBlockExplosions.remove(position, action));
     }
 
     private void enforce(Player player, CombatItemAction action, Cancellable event) {
@@ -131,4 +199,9 @@ public final class CombatItemListener implements Listener {
     }
 
     private record NoticeKey(UUID playerId, CombatItemAction action) {}
+    private record BlockPosition(UUID worldId, int x, int y, int z) {
+        static BlockPosition from(Location location) {
+            return new BlockPosition(location.getWorld().getUID(), location.getBlockX(), location.getBlockY(), location.getBlockZ());
+        }
+    }
 }
