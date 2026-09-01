@@ -70,7 +70,7 @@ public final class JudgmentListener implements Listener {
         if (event.getClickedInventory() != event.getView().getTopInventory()) {
             return;
         }
-        settingsGui.handleClick(player, event.getRawSlot());
+        settingsGui.handleClick(player, event.getRawSlot(), event.getClick());
     }
 
     @EventHandler

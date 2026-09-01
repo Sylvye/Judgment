@@ -103,7 +103,7 @@ public final class CombatItemListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
-        cooldowns.clearPlayer(event.getPlayer().getUniqueId());
+        cooldowns.clearPvpCooldowns(event.getPlayer().getUniqueId());
     }
 
     private static void stopRiptide(Player player, Vector priorVelocity) {
@@ -120,7 +120,8 @@ public final class CombatItemListener implements Listener {
         if (now - lastNotices.getOrDefault(key, 0L) < NOTICE_INTERVAL_MILLIS) return;
         lastNotices.put(key, now);
         String message = result.outcome() == CombatItemCooldownManager.Outcome.BANNED
-            ? action.displayName() + " are banned during combat."
+            ? action.displayName() + (cooldowns.scope(action) == CombatItemScope.GLOBAL
+                ? " are globally banned." : " are banned during combat.")
             : action.displayName() + " ready in " + formatSeconds(result.remainingMillis()) + "s.";
         player.sendActionBar(Component.text(message, NamedTextColor.RED));
     }

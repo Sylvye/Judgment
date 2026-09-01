@@ -3,6 +3,7 @@ package com.bountysmp.judgment.gui;
 import com.bountysmp.judgment.config.JudgmentSettings;
 import com.bountysmp.judgment.combatitem.CombatItemAction;
 import com.bountysmp.judgment.combatitem.CombatItemSettings;
+import com.bountysmp.judgment.combatitem.CombatItemScope;
 import com.bountysmp.judgment.util.DurationParser;
 import com.bountysmp.judgment.pvp.PvpSettings;
 import com.bountysmp.judgment.pvp.DragonEggSettings;
@@ -14,6 +15,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.plugin.Plugin;
 
 import java.util.List;
@@ -49,6 +51,7 @@ public final class SettingsGui {
     private final Consumer<Boolean> invisibleKillerUpdater;
     private final Supplier<CombatItemSettings> combatItemSettings;
     private final BiConsumer<CombatItemAction, Double> combatItemUpdater;
+    private final BiConsumer<CombatItemAction, CombatItemScope> combatItemScopeUpdater;
     private final Consumer<Boolean> itemCooldownBossBarUpdater;
     private final Consumer<Boolean> combatTimerBossBarUpdater;
     private final Map<UUID, PendingInput> pendingInputs = new ConcurrentHashMap<>();
@@ -66,6 +69,7 @@ public final class SettingsGui {
         Consumer<DragonEggSettings> dragonEggUpdater,
         Supplier<CombatItemSettings> combatItemSettings,
         BiConsumer<CombatItemAction, Double> combatItemUpdater,
+        BiConsumer<CombatItemAction, CombatItemScope> combatItemScopeUpdater,
         Consumer<Boolean> itemCooldownBossBarUpdater,
         Consumer<Boolean> combatTimerBossBarUpdater
     ) {
@@ -80,6 +84,7 @@ public final class SettingsGui {
         this.invisibleKillerUpdater = invisibleKillerUpdater;
         this.combatItemSettings = combatItemSettings;
         this.combatItemUpdater = combatItemUpdater;
+        this.combatItemScopeUpdater = combatItemScopeUpdater;
         this.itemCooldownBossBarUpdater = itemCooldownBossBarUpdater;
         this.combatTimerBossBarUpdater = combatTimerBossBarUpdater;
     }
@@ -172,8 +177,11 @@ public final class SettingsGui {
             double seconds = settings.seconds(action);
             inventory.setItem(COMBAT_ITEM_SLOTS[index], GuiItems.namedItem(action.icon(),
                 Component.text(action.displayName() + ": " + formatCombatItemSetting(seconds), settingColor(seconds)),
-                List.of(Component.text("-1 = banned, 0 = unrestricted, positive = cooldown seconds."),
-                    Component.text("Click to edit in chat."))));
+                List.of(Component.text("Scope: " + settings.scope(action).displayName(),
+                        settings.scope(action) == CombatItemScope.GLOBAL ? NamedTextColor.GOLD : NamedTextColor.AQUA),
+                    Component.text("-1 = banned, 0 = unrestricted, positive = cooldown seconds."),
+                    Component.text("Left-click: edit cooldown."),
+                    Component.text("Right-click: toggle scope."))));
         }
         inventory.setItem(40, GuiItems.namedItem(Material.BARRIER, Component.text("Back", NamedTextColor.GRAY),
             List.of(Component.text("Return to Judgment settings."))));
@@ -192,7 +200,7 @@ public final class SettingsGui {
 
     private static String onOff(boolean value) { return value ? "ON" : "OFF"; }
 
-    public void handleClick(Player admin, int rawSlot) {
+    public void handleClick(Player admin, int rawSlot, ClickType clickType) {
         if (!admin.hasPermission("judgment.admin")) {
             admin.closeInventory();
             return;
@@ -224,10 +232,16 @@ public final class SettingsGui {
                 open(admin);
             } else if (combatItemActionAt(rawSlot) != null) {
                 CombatItemAction action = combatItemActionAt(rawSlot);
-                pendingInputs.put(admin.getUniqueId(), PendingInput.COMBAT_ITEM);
-                pendingCombatItems.put(admin.getUniqueId(), action);
-                admin.closeInventory();
-                admin.sendMessage(Component.text("Enter -1 to ban, 0 for no cooldown, or positive cooldown seconds (decimals allowed), or cancel.", NamedTextColor.YELLOW));
+                if (clickType.isRightClick()) {
+                    CombatItemScope updated = combatItemSettings.get().scope(action).toggled();
+                    combatItemScopeUpdater.accept(action, updated);
+                    openCombatItems(admin);
+                } else if (clickType.isLeftClick()) {
+                    pendingInputs.put(admin.getUniqueId(), PendingInput.COMBAT_ITEM);
+                    pendingCombatItems.put(admin.getUniqueId(), action);
+                    admin.closeInventory();
+                    admin.sendMessage(Component.text("Enter -1 to ban, 0 for no cooldown, or positive cooldown seconds (decimals allowed), or cancel.", NamedTextColor.YELLOW));
+                }
             }
             return;
         }

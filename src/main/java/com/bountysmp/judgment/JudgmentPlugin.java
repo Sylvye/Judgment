@@ -60,7 +60,7 @@ public class JudgmentPlugin extends JavaPlugin {
         settingsGui = new SettingsGui(this, () -> settings, this::setCombatTagMillis, this::setPromptTimeoutMillis,
             this::setInvisibleKillerObfuscation,
             () -> pvpSettings, this::setPvpSettings, () -> dragonEggSettings, this::setDragonEggSettings,
-            () -> combatItemSettings, this::setCombatItemSetting,
+            () -> combatItemSettings, this::setCombatItemSetting, this::setCombatItemScope,
             this::setItemCooldownBossBars, this::setCombatTimerBossBar);
         PvpCommand pvpCommand = new PvpCommand(pvpService, player -> pvpPresentation.refreshAll());
         PluginCommand pvp = Objects.requireNonNull(getCommand("pvp"), "pvp command missing from plugin.yml");
@@ -149,6 +149,13 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set(CombatItemSettings.CONFIG_ROOT + "." + action.configKey(), seconds);
         saveConfig();
         combatItemCooldownManager.settingChanged(action, seconds);
+    }
+
+    private void setCombatItemScope(CombatItemAction action, CombatItemScope scope) {
+        combatItemSettings = combatItemSettings.withScope(action, scope);
+        getConfig().set(CombatItemSettings.SCOPE_CONFIG_ROOT + "." + action.configKey(), scope.configValue());
+        saveConfig();
+        combatItemCooldownManager.scopeChanged(action);
     }
 
     private void setItemCooldownBossBars(boolean enabled) {

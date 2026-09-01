@@ -50,7 +50,7 @@ public final class CombatItemCooldownManager {
     }
 
     public Result attempt(UUID playerId, CombatItemAction action) {
-        if (!inCombat.test(playerId)) return new Result(Outcome.ALLOWED, 0L);
+        if (!applies(playerId, action)) return new Result(Outcome.ALLOWED, 0L);
         double seconds = settings.get().seconds(action);
         if (seconds == -1.0) return new Result(Outcome.BANNED, 0L);
         if (seconds == 0.0) return new Result(Outcome.ALLOWED, 0L);
@@ -68,7 +68,7 @@ public final class CombatItemCooldownManager {
 
     /** Starts a cooldown after an action that itself created the player's combat tag. */
     public void recordFirstCombatUse(UUID playerId, CombatItemAction action) {
-        if (!inCombat.test(playerId)) return;
+        if (settings.get().scope(action) != CombatItemScope.PVP_ONLY || !inCombat.test(playerId)) return;
         double seconds = settings.get().seconds(action);
         if (seconds <= 0.0) return;
         Map<CombatItemAction, Long> actions = lastUses.computeIfAbsent(playerId,
@@ -80,11 +80,11 @@ public final class CombatItemCooldownManager {
     }
 
     public Map<CombatItemAction, Long> activeCooldowns(UUID playerId) {
-        if (!inCombat.test(playerId)) return Map.of();
         long now = clock.getAsLong();
         EnumMap<CombatItemAction, Long> active = new EnumMap<>(CombatItemAction.class);
         Map<CombatItemAction, Long> actions = lastUses.getOrDefault(playerId, Map.of());
         actions.forEach((action, lastUse) -> {
+            if (!applies(playerId, action)) return;
             double seconds = settings.get().seconds(action);
             if (seconds <= 0.0) return;
             long duration = Math.max(1L, Math.round(seconds * 1_000.0));
@@ -94,8 +94,12 @@ public final class CombatItemCooldownManager {
         return Map.copyOf(active);
     }
 
-    public void clearPlayer(UUID playerId) {
-        if (lastUses.remove(playerId) != null) save();
+    public void clearPvpCooldowns(UUID playerId) {
+        Map<CombatItemAction, Long> actions = lastUses.get(playerId);
+        if (actions == null) return;
+        boolean changed = actions.keySet().removeIf(action -> settings.get().scope(action) == CombatItemScope.PVP_ONLY);
+        if (actions.isEmpty()) lastUses.remove(playerId);
+        if (changed) save();
     }
 
     public void clearPlayersOutsideCombatAndSave() {
@@ -106,6 +110,12 @@ public final class CombatItemCooldownManager {
         if (value > 0.0) return;
         if (clear(action)) save();
     }
+
+    public void scopeChanged(CombatItemAction action) {
+        if (clear(action)) save();
+    }
+
+    public CombatItemScope scope(CombatItemAction action) { return settings.get().scope(action); }
 
     Map<UUID, Map<CombatItemAction, Long>> snapshot() {
         Map<UUID, Map<CombatItemAction, Long>> copy = new HashMap<>();
@@ -130,6 +140,17 @@ public final class CombatItemCooldownManager {
     }
 
     private boolean clearPlayersOutsideCombat() {
-        return lastUses.keySet().removeIf(playerId -> !inCombat.test(playerId));
+        boolean changed = false;
+        for (Map.Entry<UUID, Map<CombatItemAction, Long>> entry : lastUses.entrySet()) {
+            if (inCombat.test(entry.getKey())) continue;
+            changed |= entry.getValue().keySet().removeIf(
+                action -> settings.get().scope(action) == CombatItemScope.PVP_ONLY);
+        }
+        lastUses.values().removeIf(Map::isEmpty);
+        return changed;
+    }
+
+    private boolean applies(UUID playerId, CombatItemAction action) {
+        return settings.get().scope(action) == CombatItemScope.GLOBAL || inCombat.test(playerId);
     }
 }

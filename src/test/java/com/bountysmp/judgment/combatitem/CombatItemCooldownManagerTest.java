@@ -90,6 +90,28 @@ class CombatItemCooldownManagerTest {
         assertTrue(manager.attempt(player, CombatItemAction.MACE_SMASH).allowed());
     }
 
+    @Test void globalRulesApplyOutsideCombatAndSurviveReload() {
+        settings.set(new CombatItemSettings(Map.of(CombatItemAction.FIREWORKS, 20.0),
+            Map.of(CombatItemAction.FIREWORKS, CombatItemScope.GLOBAL)));
+        CombatItemCooldownManager manager = manager(false);
+        assertTrue(manager.attempt(player, CombatItemAction.FIREWORKS).allowed());
+        assertEquals(20_000L, manager.attempt(player, CombatItemAction.FIREWORKS).remainingMillis());
+        CombatItemCooldownManager reloaded = manager(false);
+        assertEquals(20_000L, reloaded.attempt(player, CombatItemAction.FIREWORKS).remainingMillis());
+        reloaded.clearPvpCooldowns(player);
+        assertFalse(reloaded.snapshot().isEmpty());
+    }
+
+    @Test void changingScopeClearsExistingTimers() {
+        settings.set(new CombatItemSettings(Map.of(CombatItemAction.ELYTRA, 10.0),
+            Map.of(CombatItemAction.ELYTRA, CombatItemScope.GLOBAL)));
+        CombatItemCooldownManager manager = manager(false);
+        manager.attempt(player, CombatItemAction.ELYTRA);
+        settings.set(settings.get().withScope(CombatItemAction.ELYTRA, CombatItemScope.PVP_ONLY));
+        manager.scopeChanged(CombatItemAction.ELYTRA);
+        assertTrue(manager.snapshot().isEmpty());
+    }
+
     private CombatItemCooldownManager manager(boolean inCombat) {
         return new CombatItemCooldownManager(new CombatItemCooldownStore(tempDir.resolve("cooldowns.yml")),
             settings::get, ignored -> inCombat, now::get, Logger.getLogger("test"));

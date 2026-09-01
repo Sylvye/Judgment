@@ -28,6 +28,18 @@ combat-item-cooldowns:
   respawn-anchors: 0
   tnt-minecarts: 0
 
+# Where each item rule applies: "pvp" while combat tagged, or "global" everywhere.
+combat-item-scopes:
+  elytra: pvp
+  fireworks: pvp
+  ender-pearls: pvp
+  mace-smash: pvp
+  riptide: pvp
+  lunge: pvp
+  end-crystals: pvp
+  respawn-anchors: pvp
+  tnt-minecarts: pvp
+
 # Defaults apply only to players without saved preferences.
 pvp:
   default-enabled: false

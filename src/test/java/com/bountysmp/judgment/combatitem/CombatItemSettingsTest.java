@@ -30,4 +30,19 @@ class CombatItemSettingsTest {
         assertEquals(0.0, settings.seconds(CombatItemAction.RIPTIDE));
         assertEquals(0.0, settings.seconds(CombatItemAction.LUNGE));
     }
+
+    @Test void scopesDefaultToPvpAndLoadGlobalValues() {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("combat-item-scopes.fireworks", "global");
+        CombatItemSettings settings = CombatItemSettings.fromConfig(config, Logger.getLogger("test"));
+        assertEquals(CombatItemScope.GLOBAL, settings.scope(CombatItemAction.FIREWORKS));
+        assertEquals(CombatItemScope.PVP_ONLY, settings.scope(CombatItemAction.ELYTRA));
+    }
+
+    @Test void invalidScopesFallBackToPvp() {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("combat-item-scopes.elytra", "somewhere");
+        assertEquals(CombatItemScope.PVP_ONLY,
+            CombatItemSettings.fromConfig(config, Logger.getLogger("test")).scope(CombatItemAction.ELYTRA));
+    }
 }

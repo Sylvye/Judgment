@@ -52,6 +52,24 @@ class CombatBossBarControllerTest {
         assertEquals(1, count(victim.activeBossBars()));
     }
 
+    @Test void globalCooldownBarDisplaysOutsideCombat() {
+        controller.close();
+        Plugin plugin = MockBukkit.createMockPlugin();
+        JudgmentSettings display = new JudgmentSettings(30_000, 10_000, PunishmentMode.RELOG,
+            false, true, false);
+        JudgmentService noCombat = new JudgmentService(plugin, display,
+            new PendingKillStore(directory.resolve("global-pending.yml")), System::currentTimeMillis);
+        CombatItemSettings items = new CombatItemSettings(Map.of(CombatItemAction.FIREWORKS, 20.0),
+            Map.of(CombatItemAction.FIREWORKS, CombatItemScope.GLOBAL));
+        CombatItemCooldownManager cooldowns = new CombatItemCooldownManager(
+            new CombatItemCooldownStore(directory.resolve("global-cooldowns.yml")), () -> items,
+            ignored -> false, System::currentTimeMillis, plugin.getLogger());
+        cooldowns.attempt(attacker.getUniqueId(), CombatItemAction.FIREWORKS);
+        controller = new CombatBossBarController(plugin, noCombat, cooldowns, () -> items, () -> display);
+        controller.refresh();
+        assertEquals(1, count(attacker.activeBossBars()));
+    }
+
     private static int count(Iterable<?> values) {
         int count = 0;
         for (Object ignored : values) count++;

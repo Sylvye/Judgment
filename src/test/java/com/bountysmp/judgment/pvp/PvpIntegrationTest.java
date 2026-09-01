@@ -90,6 +90,10 @@ class PvpIntegrationTest {
         assertEquals(45, player.getOpenInventory().getTopInventory().getSize());
         for (int slot : new int[] {11, 13, 15, 20, 22, 24, 29, 31, 33, 40})
             assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
+        click(11, ClickType.RIGHT);
+        assertEquals("global", plugin.getConfig().getString("combat-item-scopes.elytra"));
+        click(11, ClickType.RIGHT);
+        assertEquals("pvp", plugin.getConfig().getString("combat-item-scopes.elytra"));
         click(40);
         click(23);
         for (int slot : new int[] {10, 12, 14, 16, 22})
@@ -115,8 +119,12 @@ class PvpIntegrationTest {
     }
 
     private void click(int slot) {
+        click(slot, ClickType.LEFT);
+    }
+
+    private void click(int slot, ClickType clickType) {
         var event = new InventoryClickEvent(player.getOpenInventory(), InventoryType.SlotType.CONTAINER,
-            slot, ClickType.LEFT, InventoryAction.PICKUP_ALL);
+            slot, clickType, InventoryAction.PICKUP_ALL);
         server.getPluginManager().callEvent(event);
         assertTrue(event.isCancelled());
     }

@@ -47,8 +47,13 @@ ender pearls, mace smashes, riptide, spear lunges, end crystal placement, respaw
 anchor placement, and TNT minecart placement while combat tagged. Each rule accepts
 `-1` to ban the action, `0` for unrestricted use (the default), or a positive decimal
 number of cooldown seconds. Leaving combat, dying, disconnecting, or restarting the
-server clears every active item cooldown. Optional settings show the combat timer and
+server clears active PvP-only item cooldowns. Optional settings show the combat timer and
 each active item cooldown as independently stacked, decreasing boss bars.
+
+Each item rule also has a scope. `PVP ONLY` applies while combat tagged and clears its
+timer on combat exit. `GLOBAL` applies everywhere and persists its timer through
+reconnects and restarts. In the item grid, left-click edits the cooldown and right-click
+toggles the scope.
 
 Player preferences and combat timing are stored by UUID in `plugins/Judgment/pvp-players.yml`.
 Do not delete this file when upgrading. If loading or saving fails, PvP attacks and
@@ -197,6 +202,16 @@ combat-item-cooldowns:
   end-crystals: 0
   respawn-anchors: 0
   tnt-minecarts: 0
+combat-item-scopes:
+  elytra: pvp
+  fireworks: pvp
+  ender-pearls: pvp
+  mace-smash: pvp
+  riptide: pvp
+  lunge: pvp
+  end-crystals: pvp
+  respawn-anchors: pvp
+  tnt-minecarts: pvp
 pvp:
   default-enabled: false
   toggle-cooldown-seconds: 86400
