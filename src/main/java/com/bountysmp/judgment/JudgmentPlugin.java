@@ -1,10 +1,12 @@
 package com.bountysmp.judgment;
 
 import com.bountysmp.judgment.command.JudgmentCommand;
+import com.bountysmp.judgment.combatitem.*;
 import com.bountysmp.judgment.pvp.*;
 import com.bountysmp.judgment.config.JudgmentSettings;
 import com.bountysmp.judgment.gui.SettingsGui;
 import com.bountysmp.judgment.listener.JudgmentListener;
+import com.bountysmp.judgment.module.InvisibleKillerObfuscation;
 import com.bountysmp.judgment.service.JudgmentService;
 import com.bountysmp.judgment.storage.PendingKillStore;
 import org.bukkit.command.PluginCommand;
@@ -24,6 +26,9 @@ public class JudgmentPlugin extends JavaPlugin {
     private PvpPresentation pvpPresentation;
     private DragonEggSettings dragonEggSettings;
     private DragonEggPrivilege dragonEggPrivilege;
+    private CombatItemSettings combatItemSettings;
+    private CombatItemCooldownManager combatItemCooldownManager;
+    private CombatBossBarController combatBossBarController;
 
     public PvpService getPvpService() {
         return pvpService;
@@ -42,18 +47,29 @@ public class JudgmentPlugin extends JavaPlugin {
         judgmentService = new JudgmentService(this, settings, pendingKillStore, System::currentTimeMillis);
         pvpSettings = PvpSettings.fromConfig(getConfig(), getLogger());
         dragonEggSettings = DragonEggSettings.fromConfig(getConfig(), getLogger());
+        combatItemSettings = CombatItemSettings.fromConfig(getConfig(), getLogger());
         pvpService = new PvpService(new PvpStore(getDataFolder().toPath().resolve("pvp-players.yml")),
             () -> pvpSettings, System::currentTimeMillis,
             id -> judgmentService.getCombatTag(id).isPresent(), getLogger());
         pvpPresentation = new PvpPresentation(pvpService);
         dragonEggPrivilege = new DragonEggPrivilege(this, () -> dragonEggSettings);
+        combatItemCooldownManager = new CombatItemCooldownManager(
+            new CombatItemCooldownStore(getDataFolder().toPath().resolve("combat-item-cooldowns.yml")),
+            () -> combatItemSettings, id -> judgmentService.getCombatTag(id).isPresent(),
+            System::currentTimeMillis, getLogger());
         settingsGui = new SettingsGui(this, () -> settings, this::setCombatTagMillis, this::setPromptTimeoutMillis,
-            () -> pvpSettings, this::setPvpSettings, () -> dragonEggSettings, this::setDragonEggSettings);
+            this::setInvisibleKillerObfuscation,
+            () -> pvpSettings, this::setPvpSettings, () -> dragonEggSettings, this::setDragonEggSettings,
+            () -> combatItemSettings, this::setCombatItemSetting,
+            this::setItemCooldownBossBars, this::setCombatTimerBossBar);
         PvpCommand pvpCommand = new PvpCommand(pvpService, player -> pvpPresentation.refreshAll());
         PluginCommand pvp = Objects.requireNonNull(getCommand("pvp"), "pvp command missing from plugin.yml");
         pvp.setExecutor(pvpCommand);
         pvp.setTabCompleter(pvpCommand);
         getServer().getPluginManager().registerEvents(new PvpListener(this, pvpService, judgmentService, pvpPresentation), this);
+        getServer().getPluginManager().registerEvents(new CombatItemListener(this, combatItemCooldownManager), this);
+        combatBossBarController = new CombatBossBarController(this, judgmentService, combatItemCooldownManager,
+            () -> combatItemSettings, () -> settings);
         pvpPresentation.refreshAll();
         getServer().getScheduler().runTaskTimer(this, () -> {
             for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
@@ -66,11 +82,14 @@ public class JudgmentPlugin extends JavaPlugin {
         command.setTabCompleter(judgmentCommand);
 
         getServer().getPluginManager().registerEvents(new JudgmentListener(judgmentService, settingsGui, dragonEggPrivilege), this);
+        getServer().getPluginManager().registerEvents(
+            new InvisibleKillerObfuscation(() -> settings.invisibleKillerObfuscation()), this);
         for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
     }
 
     @Override
     public void onDisable() {
+        if (combatBossBarController != null) combatBossBarController.close();
         if (pvpPresentation != null) pvpPresentation.close();
         if (pendingKillStore != null) {
             try {
@@ -114,6 +133,34 @@ public class JudgmentPlugin extends JavaPlugin {
     private void setPromptTimeoutMillis(long millis) {
         settings = settings.withPromptTimeoutMillis(millis);
         getConfig().set("prompt-timeout-seconds", millis / 1_000.0);
+        saveConfig();
+        judgmentService.updateSettings(settings);
+    }
+
+    private void setInvisibleKillerObfuscation(boolean enabled) {
+        settings = settings.withInvisibleKillerObfuscation(enabled);
+        getConfig().set("invisible-killer-obfuscation", enabled);
+        saveConfig();
+        judgmentService.updateSettings(settings);
+    }
+
+    private void setCombatItemSetting(CombatItemAction action, Double seconds) {
+        combatItemSettings = combatItemSettings.with(action, seconds);
+        getConfig().set(CombatItemSettings.CONFIG_ROOT + "." + action.configKey(), seconds);
+        saveConfig();
+        combatItemCooldownManager.settingChanged(action, seconds);
+    }
+
+    private void setItemCooldownBossBars(boolean enabled) {
+        settings = settings.withItemCooldownBossBars(enabled);
+        getConfig().set("bossbars.item-cooldowns", enabled);
+        saveConfig();
+        judgmentService.updateSettings(settings);
+    }
+
+    private void setCombatTimerBossBar(boolean enabled) {
+        settings = settings.withCombatTimerBossBar(enabled);
+        getConfig().set("bossbars.combat-timer", enabled);
         saveConfig();
         judgmentService.updateSettings(settings);
     }

@@ -7,6 +7,27 @@ punishment-mode: relog
 # Prompt timeout for clickable YES/NO choices.
 prompt-timeout-seconds: 10
 
+# Hide an invisible killer's identity in the public death message while preserving kill credit.
+invisible-killer-obfuscation: false
+
+bossbars:
+  # Show one decreasing bar for every active combat item cooldown.
+  item-cooldowns: false
+  # Show the remaining active combat-tag time.
+  combat-timer: false
+
+# Combat-only item/action rules: -1 bans, 0 disables the cooldown, positive values are seconds.
+combat-item-cooldowns:
+  elytra: 0
+  fireworks: 0
+  ender-pearls: 0
+  mace-smash: 0
+  riptide: 0
+  lunge: 0
+  end-crystals: 0
+  respawn-anchors: 0
+  tnt-minecarts: 0
+
 # Defaults apply only to players without saved preferences.
 pvp:
   default-enabled: false

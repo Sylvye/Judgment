@@ -36,7 +36,7 @@ public final class JudgmentCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (args.length == 1 && args[0].equalsIgnoreCase("settings")) {
+        if (args.length == 0 || (args.length == 1 && args[0].equalsIgnoreCase("settings"))) {
             if (!(sender instanceof Player player)) {
                 sender.sendMessage(Component.text("Only players can open Judgment settings.", NamedTextColor.RED));
                 return true;

@@ -3,6 +3,7 @@ package com.bountysmp.judgment.listener;
 import com.bountysmp.judgment.gui.SettingsGui;
 import com.bountysmp.judgment.gui.SettingsMenuHolder;
 import com.bountysmp.judgment.gui.DragonEggMenuHolder;
+import com.bountysmp.judgment.gui.CombatItemMenuHolder;
 import com.bountysmp.judgment.service.JudgmentService;
 import com.bountysmp.judgment.pvp.DragonEggPrivilege;
 import io.papermc.paper.event.player.AsyncChatEvent;
@@ -62,7 +63,7 @@ public final class JudgmentListener implements Listener {
         Bukkit.getScheduler().runTask(judgmentService.getPlugin(), () -> dragonEggPrivilege.refresh(player));
         if (!(event.getView().getTopInventory().getHolder() instanceof SettingsMenuHolder)
             && !(event.getView().getTopInventory().getHolder() instanceof DragonEggMenuHolder)) {
-            return;
+            if (!(event.getView().getTopInventory().getHolder() instanceof CombatItemMenuHolder)) return;
         }
 
         event.setCancelled(true);
@@ -79,6 +80,11 @@ public final class JudgmentListener implements Listener {
         }
         if (event.getView().getTopInventory().getHolder() instanceof SettingsMenuHolder
             || event.getView().getTopInventory().getHolder() instanceof DragonEggMenuHolder) {
+            event.setCancelled(true);
+            if (event.getWhoClicked() instanceof Player player) {
+                Bukkit.getScheduler().runTask(judgmentService.getPlugin(), () -> dragonEggPrivilege.refresh(player));
+            }
+        } else if (event.getView().getTopInventory().getHolder() instanceof CombatItemMenuHolder) {
             event.setCancelled(true);
             if (event.getWhoClicked() instanceof Player player) {
                 Bukkit.getScheduler().runTask(judgmentService.getPlugin(), () -> dragonEggPrivilege.refresh(player));

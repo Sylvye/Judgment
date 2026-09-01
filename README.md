@@ -2,6 +2,8 @@
 
 Judgment is a Paper `26.2` combat-log plugin designed for a survival-friendly SMP. Instead of automatically punishing every disconnect, it asks the credited opponent whether the combat logger should be killed.
 
+When enabled in the settings menu, Judgment replaces an invisible killer's name in the public death message with a randomized, fixed-length eight-character obfuscated mask. The original vanilla death reason and weapon details are preserved. This feature is off by default. The real killer remains attached to the death internally, so kill-credit integrations continue to work without revealing their identity or username length.
+
 ## Requirements
 
 - Minecraft/Paper `26.2`
@@ -36,9 +38,17 @@ environmental damage, and untraceable traps (such as placed lava) are unchanged.
 This is not a general anti-grief system. Approved Judgment punishments still execute
 regardless of PvP status and do not start new combat tags.
 
-Use `/judgment settings` to change the default status, toggle cooldown, and
+Use `/judgment` or `/judgment settings` to open the settings menu and change the default status, toggle cooldown, and
 post-combat wait. Duration changes affect existing waits. Enter `24h`, `10m`, or `0s`
 (to disable a delay); active combat always prevents disabling PvP.
+
+The **Combat Item Rules** submenu controls elytra entry, elytra firework boosts,
+ender pearls, mace smashes, riptide, spear lunges, end crystal placement, respawn
+anchor placement, and TNT minecart placement while combat tagged. Each rule accepts
+`-1` to ban the action, `0` for unrestricted use (the default), or a positive decimal
+number of cooldown seconds. Leaving combat, dying, disconnecting, or restarting the
+server clears every active item cooldown. Optional settings show the combat timer and
+each active item cooldown as independently stacked, decreasing boss bars.
 
 Player preferences and combat timing are stored by UUID in `plugins/Judgment/pvp-players.yml`.
 Do not delete this file when upgrading. If loading or saving fails, PvP attacks and
@@ -174,6 +184,19 @@ Default `config.yml`:
 combat-tag-seconds: 30
 punishment-mode: relog
 prompt-timeout-seconds: 10
+bossbars:
+  item-cooldowns: false
+  combat-timer: false
+combat-item-cooldowns:
+  elytra: 0
+  fireworks: 0
+  ender-pearls: 0
+  mace-smash: 0
+  riptide: 0
+  lunge: 0
+  end-crystals: 0
+  respawn-anchors: 0
+  tnt-minecarts: 0
 pvp:
   default-enabled: false
   toggle-cooldown-seconds: 86400

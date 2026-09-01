@@ -80,19 +80,30 @@ class PvpIntegrationTest {
 
     @Test void adminGuiEditsAllPvpSettingsAndTurningOffRemovesPrefixes() {
         player.setOp(true);
-        server.dispatchCommand(player, "judgment settings");
-        assertNotNull(player.getOpenInventory().getTopInventory().getItem(20));
-        assertNotNull(player.getOpenInventory().getTopInventory().getItem(22));
-        assertNotNull(player.getOpenInventory().getTopInventory().getItem(24));
-        click(20);
+        server.dispatchCommand(player, "judgment");
+        assertNotNull(player.getOpenInventory().getTopInventory().getItem(10));
+        assertNotNull(player.getOpenInventory().getTopInventory().getItem(12));
+        assertNotNull(player.getOpenInventory().getTopInventory().getItem(14));
+        assertNotNull(player.getOpenInventory().getTopInventory().getItem(21));
+        assertNotNull(player.getOpenInventory().getTopInventory().getItem(23));
+        click(21);
+        assertEquals(45, player.getOpenInventory().getTopInventory().getSize());
+        for (int slot : new int[] {11, 13, 15, 20, 22, 24, 29, 31, 33, 40})
+            assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
+        click(40);
+        click(23);
+        for (int slot : new int[] {10, 12, 14, 16, 22})
+            assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
+        click(22);
+        click(10);
         assertTrue(plugin.getConfig().getBoolean("pvp.default-enabled"));
         assertFalse(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
-        click(22);
+        click(12);
         chat("9223372036854775807h");
         assertEquals(86400, plugin.getConfig().getDouble("pvp.toggle-cooldown-seconds"));
         chat("0s");
         assertEquals(0, plugin.getConfig().getDouble("pvp.toggle-cooldown-seconds"));
-        click(24);
+        click(14);
         chat("5m");
         assertEquals(300, plugin.getConfig().getDouble("pvp.post-combat-delay-seconds"));
         server.dispatchCommand(player, "pvp on");
