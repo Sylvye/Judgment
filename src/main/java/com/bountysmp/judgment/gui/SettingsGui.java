@@ -49,9 +49,10 @@ public final class SettingsGui {
     private static final int COMBAT_RULE_BACK_SLOT = 49;
     private static final CombatItemAction[] MANAGED_ACTIONS = {
         CombatItemAction.ELYTRA, CombatItemAction.FIREWORKS, CombatItemAction.ENDER_PEARLS,
-        CombatItemAction.MACE_SMASH, CombatItemAction.RIPTIDE, CombatItemAction.LUNGE
+        CombatItemAction.MACE_SMASH, CombatItemAction.RIPTIDE, CombatItemAction.LUNGE,
+        CombatItemAction.FIREWORK_CROSSBOWS
     };
-    private static final int[] MANAGED_SLOTS = {11, 12, 13, 14, 15, 16};
+    private static final int[] MANAGED_SLOTS = {11, 12, 13, 14, 15, 16, 22};
     private static final CombatItemAction[] EXPLOSIVE_ACTIONS = {
         CombatItemAction.TNT, CombatItemAction.TNT_MINECARTS, CombatItemAction.BEDS,
         CombatItemAction.RESPAWN_ANCHORS, CombatItemAction.END_CRYSTALS

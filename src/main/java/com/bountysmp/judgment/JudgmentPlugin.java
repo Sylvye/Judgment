@@ -29,6 +29,7 @@ public class JudgmentPlugin extends JavaPlugin {
     private CombatItemSettings combatItemSettings;
     private CombatItemCooldownManager combatItemCooldownManager;
     private CombatBossBarController combatBossBarController;
+    private NativeWeaponCooldownController nativeWeaponCooldownController;
 
     public PvpService getPvpService() {
         return pvpService;
@@ -78,7 +79,10 @@ public class JudgmentPlugin extends JavaPlugin {
         pvp.setExecutor(pvpCommand);
         pvp.setTabCompleter(pvpCommand);
         getServer().getPluginManager().registerEvents(new PvpListener(this, pvpService, judgmentService, pvpPresentation), this);
-        getServer().getPluginManager().registerEvents(new CombatItemListener(this, combatItemCooldownManager), this);
+        nativeWeaponCooldownController = new NativeWeaponCooldownController(this, combatItemCooldownManager);
+        getServer().getPluginManager().registerEvents(nativeWeaponCooldownController, this);
+        getServer().getPluginManager().registerEvents(
+            new CombatItemListener(this, combatItemCooldownManager, nativeWeaponCooldownController), this);
         combatBossBarController = new CombatBossBarController(this, judgmentService, combatItemCooldownManager,
             () -> combatItemSettings, () -> settings);
         pvpPresentation.refreshAll();
@@ -100,6 +104,7 @@ public class JudgmentPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (nativeWeaponCooldownController != null) nativeWeaponCooldownController.close();
         if (combatBossBarController != null) combatBossBarController.close();
         if (pvpPresentation != null) pvpPresentation.close();
         if (pendingKillStore != null) {
@@ -168,6 +173,7 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set(CombatItemSettings.CONFIG_ROOT + "." + action.configKey(), seconds);
         saveConfig();
         combatItemCooldownManager.settingChanged(action, seconds);
+        nativeWeaponCooldownController.resynchronize(action);
     }
 
     private void setCombatItemScope(CombatItemAction action, CombatItemScope scope) {
@@ -175,6 +181,7 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set(CombatItemSettings.SCOPE_CONFIG_ROOT + "." + action.configKey(), scope.configValue());
         saveConfig();
         combatItemCooldownManager.scopeChanged(action);
+        nativeWeaponCooldownController.resynchronize(action);
     }
 
     private void setCombatItemDamageModifier(CombatItemAction action, Double modifier) {

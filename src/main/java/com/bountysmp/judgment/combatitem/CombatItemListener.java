@@ -2,6 +2,7 @@ package com.bountysmp.judgment.combatitem;
 
 import com.destroystokyo.paper.event.player.PlayerElytraBoostEvent;
 import com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent;
+import io.papermc.paper.event.entity.EntityLoadCrossbowEvent;
 import io.papermc.paper.event.entity.EntityLungeEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -12,6 +13,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.EnderPearl;
+import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TNTPrimed;
 import org.bukkit.entity.minecart.ExplosiveMinecart;
@@ -22,12 +24,17 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityPlaceEvent;
+import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.player.PlayerRiptideEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.block.Action;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.util.Vector;
 
@@ -38,13 +45,16 @@ import java.util.UUID;
 public final class CombatItemListener implements Listener {
     private static final long NOTICE_INTERVAL_MILLIS = 500L;
     private final CombatItemCooldownManager cooldowns;
+    private final NativeWeaponCooldownController nativeCooldowns;
     private final Plugin plugin;
     private final Map<NoticeKey, Long> lastNotices = new HashMap<>();
     private final Map<BlockPosition, CombatItemAction> imminentBlockExplosions = new HashMap<>();
 
-    public CombatItemListener(Plugin plugin, CombatItemCooldownManager cooldowns) {
+    public CombatItemListener(Plugin plugin, CombatItemCooldownManager cooldowns,
+                              NativeWeaponCooldownController nativeCooldowns) {
         this.plugin = plugin;
         this.cooldowns = cooldowns;
+        this.nativeCooldowns = nativeCooldowns;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -65,17 +75,32 @@ public final class CombatItemListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onMaceSmash(EntityDamageEvent event) {
+    public void onMaceAttack(EntityDamageByEntityEvent event) {
+        if (!(event.getDamager() instanceof Player player)
+            || player.getInventory().getItemInMainHand().getType() != org.bukkit.Material.MACE) return;
+        CombatItemAction action = CombatItemAction.MACE_SMASH;
+        Long remaining = cooldowns.activeCooldowns(player.getUniqueId()).get(action);
+        if (remaining != null) {
+            event.setCancelled(true);
+            showDenied(player, action,
+                new CombatItemCooldownManager.Result(CombatItemCooldownManager.Outcome.COOLDOWN, remaining));
+            return;
+        }
         if (!event.getDamageSource().getDamageType().equals(DamageType.MACE_SMASH)) return;
-        if (event.getDamageSource().getCausingEntity() instanceof Player player)
-            enforce(player, CombatItemAction.MACE_SMASH, event);
+        CombatItemCooldownManager.Result result = attempt(player, action);
+        if (!result.allowed()) {
+            event.setCancelled(true);
+            showDenied(player, action, result);
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void recordMaceSmashThatStartedCombat(EntityDamageEvent event) {
         if (!event.getDamageSource().getDamageType().equals(DamageType.MACE_SMASH)) return;
-        if (event.getDamageSource().getCausingEntity() instanceof Player player)
+        if (event.getDamageSource().getCausingEntity() instanceof Player player) {
             cooldowns.recordFirstCombatUse(player.getUniqueId(), CombatItemAction.MACE_SMASH);
+            applyActiveNativeCooldown(player, CombatItemAction.MACE_SMASH);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -92,6 +117,47 @@ public final class CombatItemListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onLunge(EntityLungeEvent event) {
         if (event.getEntity() instanceof Player player) enforce(player, CombatItemAction.LUNGE, event);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void preventBannedRiptideCharge(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_AIR && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        ItemStack item = event.getItem();
+        if (item == null || item.getType() != org.bukkit.Material.TRIDENT
+            || !item.containsEnchantment(Enchantment.RIPTIDE)) return;
+        Player player = event.getPlayer();
+        if (!cooldowns.isBanned(player.getUniqueId(), CombatItemAction.RIPTIDE)) return;
+        event.setCancelled(true);
+        showDenied(player, CombatItemAction.RIPTIDE,
+            new CombatItemCooldownManager.Result(CombatItemCooldownManager.Outcome.BANNED, 0L));
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void preventBannedFireworkCrossbowLoad(EntityLoadCrossbowEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        if (!cooldowns.isBanned(player.getUniqueId(), CombatItemAction.FIREWORK_CROSSBOWS)) return;
+        if (!wouldLoadFirework(player, event.getHand())) return;
+        event.setCancelled(true);
+        showDenied(player, CombatItemAction.FIREWORK_CROSSBOWS,
+            new CombatItemCooldownManager.Result(CombatItemCooldownManager.Outcome.BANNED, 0L));
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onFireworkCrossbowShot(EntityShootBowEvent event) {
+        if (!(event.getEntity() instanceof Player player) || event.getBow().getType() != org.bukkit.Material.CROSSBOW)
+            return;
+        ItemStack consumable = event.getConsumable();
+        if (!(event.getProjectile() instanceof Firework)
+            && (consumable == null || consumable.getType() != org.bukkit.Material.FIREWORK_ROCKET)) return;
+        CombatItemAction action = CombatItemAction.FIREWORK_CROSSBOWS;
+        if (cooldowns.isBanned(player.getUniqueId(), action)) return;
+        CombatItemCooldownManager.Result result = cooldowns.attempt(player.getUniqueId(), action);
+        if (!result.allowed()) {
+            nativeCooldowns.apply(player, action, event.getBow(), result.remainingMillis());
+            return;
+        }
+        Long remaining = cooldowns.activeCooldowns(player.getUniqueId()).get(action);
+        if (remaining != null) nativeCooldowns.apply(player, action, event.getBow(), remaining);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -180,9 +246,24 @@ public final class CombatItemListener implements Listener {
     }
 
     private void enforce(Player player, CombatItemAction action, Cancellable event) {
-        CombatItemCooldownManager.Result result = cooldowns.attempt(player.getUniqueId(), action);
+        CombatItemCooldownManager.Result result = attempt(player, action);
         if (result.allowed()) return;
+        if (result.outcome() == CombatItemCooldownManager.Outcome.COOLDOWN && action.usesNativeCooldown()
+            && !action.requiresEventCooldownEnforcement()) {
+            nativeCooldowns.apply(player, action, result.remainingMillis());
+            return;
+        }
         event.setCancelled(true);
+        showDenied(player, action, result);
+    }
+
+    private CombatItemCooldownManager.Result attempt(Player player, CombatItemAction action) {
+        CombatItemCooldownManager.Result result = cooldowns.attempt(player.getUniqueId(), action);
+        if (result.allowed()) applyActiveNativeCooldown(player, action);
+        return result;
+    }
+
+    private void showDenied(Player player, CombatItemAction action, CombatItemCooldownManager.Result result) {
         long now = System.currentTimeMillis();
         NoticeKey key = new NoticeKey(player.getUniqueId(), action);
         if (now - lastNotices.getOrDefault(key, 0L) < NOTICE_INTERVAL_MILLIS) return;
@@ -192,6 +273,29 @@ public final class CombatItemListener implements Listener {
                 ? " are globally banned." : " are banned during combat.")
             : action.displayName() + " ready in " + formatSeconds(result.remainingMillis()) + "s.";
         player.sendActionBar(Component.text(message, NamedTextColor.RED));
+    }
+
+    private static boolean wouldLoadFirework(Player player, EquipmentSlot crossbowHand) {
+        ItemStack opposite = crossbowHand == EquipmentSlot.HAND
+            ? player.getInventory().getItemInOffHand() : player.getInventory().getItemInMainHand();
+        if (isCrossbowProjectile(opposite)) return opposite.getType() == org.bukkit.Material.FIREWORK_ROCKET;
+        for (ItemStack item : player.getInventory().getStorageContents()) {
+            if (isCrossbowProjectile(item)) return item.getType() == org.bukkit.Material.FIREWORK_ROCKET;
+        }
+        return false;
+    }
+
+    private static boolean isCrossbowProjectile(ItemStack item) {
+        if (item == null) return false;
+        return item.getType() == org.bukkit.Material.ARROW
+            || item.getType() == org.bukkit.Material.SPECTRAL_ARROW
+            || item.getType() == org.bukkit.Material.TIPPED_ARROW
+            || item.getType() == org.bukkit.Material.FIREWORK_ROCKET;
+    }
+
+    private void applyActiveNativeCooldown(Player player, CombatItemAction action) {
+        Long remaining = cooldowns.activeCooldowns(player.getUniqueId()).get(action);
+        if (remaining != null) nativeCooldowns.apply(player, action, remaining);
     }
 
     static String formatSeconds(long millis) {

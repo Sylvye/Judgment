@@ -118,6 +118,10 @@ public final class CombatItemCooldownManager {
     public CombatItemScope scope(CombatItemAction action) { return settings.get().scope(action); }
     public double damageModifier(CombatItemAction action) { return settings.get().damageModifier(action); }
 
+    public boolean isBanned(UUID playerId, CombatItemAction action) {
+        return applies(playerId, action) && settings.get().seconds(action) == -1.0;
+    }
+
     Map<UUID, Map<CombatItemAction, Long>> snapshot() {
         Map<UUID, Map<CombatItemAction, Long>> copy = new HashMap<>();
         lastUses.forEach((uuid, actions) -> copy.put(uuid, Map.copyOf(actions)));

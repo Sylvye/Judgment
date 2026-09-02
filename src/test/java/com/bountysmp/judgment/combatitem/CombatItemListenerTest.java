@@ -2,6 +2,7 @@ package com.bountysmp.judgment.combatitem;
 
 import com.destroystokyo.paper.event.player.PlayerElytraBoostEvent;
 import com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent;
+import io.papermc.paper.event.entity.EntityLoadCrossbowEvent;
 import io.papermc.paper.event.entity.EntityLungeEvent;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -13,13 +14,16 @@ import org.bukkit.entity.*;
 import org.bukkit.entity.minecart.ExplosiveMinecart;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityPlaceEvent;
+import org.bukkit.event.entity.EntityShootBowEvent;
 import org.bukkit.event.entity.EntityToggleGlideEvent;
 import org.bukkit.event.player.PlayerRiptideEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.block.Action;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
@@ -41,6 +45,8 @@ class CombatItemListenerTest {
     WorldMock world;
     PlayerMock player;
     CombatItemListener listener;
+    NativeWeaponCooldownController nativeCooldowns;
+    CombatItemCooldownManager manager;
     AtomicReference<CombatItemSettings> settings;
 
     @BeforeEach void setup() {
@@ -51,14 +57,18 @@ class CombatItemListenerTest {
         EnumMap<CombatItemAction, Double> values = new EnumMap<>(CombatItemAction.class);
         for (CombatItemAction action : CombatItemAction.values()) values.put(action, -1.0);
         settings = new AtomicReference<>(new CombatItemSettings(values));
-        CombatItemCooldownManager manager = new CombatItemCooldownManager(
+        manager = new CombatItemCooldownManager(
             new CombatItemCooldownStore(directory.resolve("cooldowns.yml")), settings::get,
             ignored -> true, System::currentTimeMillis, plugin.getLogger());
-        listener = new CombatItemListener(plugin, manager);
+        nativeCooldowns = new NativeWeaponCooldownController(plugin, manager);
+        listener = new CombatItemListener(plugin, manager, nativeCooldowns);
         server.getPluginManager().registerEvents(listener, plugin);
     }
 
-    @AfterEach void cleanup() { MockBukkit.unmock(); }
+    @AfterEach void cleanup() {
+        nativeCooldowns.close();
+        MockBukkit.unmock();
+    }
 
     @Test void blocksElytraEntryButNotExit() {
         EntityToggleGlideEvent entering = new EntityToggleGlideEvent(player, true);
@@ -92,11 +102,104 @@ class CombatItemListenerTest {
     }
 
     @Test void blocksMaceSmash() {
-        DamageSource source = DamageSource.builder(DamageType.MACE_SMASH)
-            .withDirectEntity(player).withCausingEntity(player).build();
-        EntityDamageEvent smash = new EntityDamageEvent(player, EntityDamageEvent.DamageCause.ENTITY_ATTACK, source, 10);
+        PlayerMock target = server.addPlayer("Target");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.MACE));
+        EntityDamageByEntityEvent smash = maceDamage(target, DamageType.MACE_SMASH);
         server.getPluginManager().callEvent(smash);
         assertTrue(smash.isCancelled());
+    }
+
+    @Test void positiveWeaponRulesUseTheirConfiguredEnforcement() {
+        settings.set(CombatItemSettings.defaults()
+            .with(CombatItemAction.MACE_SMASH, 1.01)
+            .with(CombatItemAction.RIPTIDE, 1.01)
+            .with(CombatItemAction.LUNGE, 1.01));
+
+        PlayerRiptideEvent riptide = new PlayerRiptideEvent(player, new ItemStack(Material.TRIDENT));
+        server.getPluginManager().callEvent(riptide);
+        assertFalse(riptide.isCancelled());
+        assertEquals(21, player.getCooldown(Material.TRIDENT));
+        player.setCooldown(Material.TRIDENT, 10);
+        nativeCooldowns.refresh(player);
+        assertEquals(10, player.getCooldown(Material.TRIDENT));
+        player.setCooldown(Material.TRIDENT, 0);
+        nativeCooldowns.resynchronize(CombatItemAction.RIPTIDE);
+        assertTrue(player.getCooldown(Material.TRIDENT) > 0);
+
+        EntityLungeEvent lunge = new EntityLungeEvent(player, 1);
+        server.getPluginManager().callEvent(lunge);
+        assertFalse(lunge.isCancelled());
+        for (Material spear : spearMaterials()) assertEquals(0, player.getCooldown(spear));
+        EntityLungeEvent secondLunge = new EntityLungeEvent(player, 1);
+        server.getPluginManager().callEvent(secondLunge);
+        assertTrue(secondLunge.isCancelled());
+
+        PlayerMock target = server.addPlayer("Target");
+        player.getInventory().setItemInMainHand(new ItemStack(Material.MACE));
+        EntityDamageByEntityEvent smash = maceDamage(target, DamageType.MACE_SMASH);
+        server.getPluginManager().callEvent(smash);
+        assertFalse(smash.isCancelled());
+        assertEquals(21, player.getCooldown(Material.MACE));
+        EntityDamageByEntityEvent ordinaryAttack = maceDamage(target, DamageType.PLAYER_ATTACK);
+        server.getPluginManager().callEvent(ordinaryAttack);
+        assertTrue(ordinaryAttack.isCancelled());
+
+        settings.set(CombatItemSettings.defaults());
+        manager.settingChanged(CombatItemAction.MACE_SMASH, 0.0);
+        manager.settingChanged(CombatItemAction.RIPTIDE, 0.0);
+        manager.settingChanged(CombatItemAction.LUNGE, 0.0);
+        nativeCooldowns.refresh(player);
+        assertEquals(0, player.getCooldown(Material.MACE));
+        assertEquals(0, player.getCooldown(Material.TRIDENT));
+        assertEquals(0, player.getCooldown(Material.IRON_SPEAR));
+    }
+
+    @Test void nativeCooldownRoundsPartialTicksUp() {
+        nativeCooldowns.apply(player, CombatItemAction.RIPTIDE, 51L);
+        assertEquals(2, player.getCooldown(Material.TRIDENT));
+    }
+
+    @Test void blocksBannedRiptideBeforeItStartsCharging() {
+        ItemStack riptide = new ItemStack(Material.TRIDENT);
+        riptide.addUnsafeEnchantment(Enchantment.RIPTIDE, 1);
+        PlayerInteractEvent blocked = new PlayerInteractEvent(player, Action.RIGHT_CLICK_AIR,
+            riptide, null, BlockFace.SELF, EquipmentSlot.HAND);
+        server.getPluginManager().callEvent(blocked);
+        assertTrue(blocked.isCancelled());
+
+        PlayerInteractEvent ordinary = new PlayerInteractEvent(player, Action.RIGHT_CLICK_AIR,
+            new ItemStack(Material.TRIDENT), null, BlockFace.SELF, EquipmentSlot.HAND);
+        server.getPluginManager().callEvent(ordinary);
+        assertNotEquals(org.bukkit.event.Event.Result.DENY, ordinary.useItemInHand());
+    }
+
+    @Test void bansOnlyFireworkCrossbowLoadingAndTimesFireworkShots() {
+        ItemStack crossbow = new ItemStack(Material.CROSSBOW);
+        player.getInventory().setItemInOffHand(new ItemStack(Material.FIREWORK_ROCKET));
+        EntityLoadCrossbowEvent blockedLoad = new EntityLoadCrossbowEvent(player, crossbow, EquipmentSlot.HAND);
+        server.getPluginManager().callEvent(blockedLoad);
+        assertTrue(blockedLoad.isCancelled());
+
+        player.getInventory().setItemInOffHand(new ItemStack(Material.ARROW));
+        EntityLoadCrossbowEvent arrowLoad = new EntityLoadCrossbowEvent(player, crossbow, EquipmentSlot.HAND);
+        server.getPluginManager().callEvent(arrowLoad);
+        assertFalse(arrowLoad.isCancelled());
+
+        settings.set(CombatItemSettings.defaults().with(CombatItemAction.FIREWORK_CROSSBOWS, 1.01));
+        Firework firework = world.spawn(world.getSpawnLocation(), Firework.class);
+        EntityShootBowEvent shot = new EntityShootBowEvent(player, crossbow,
+            new ItemStack(Material.FIREWORK_ROCKET), firework, EquipmentSlot.HAND, 1.0f, true);
+        server.getPluginManager().callEvent(shot);
+        assertFalse(shot.isCancelled());
+        assertTrue(player.getCooldown(crossbow) > 0);
+        assertTrue(player.getCooldown(crossbow) <= 21);
+
+        player.setCooldown(crossbow, 0);
+        EntityShootBowEvent arrowShot = new EntityShootBowEvent(player, crossbow,
+            new ItemStack(Material.ARROW), world.spawn(world.getSpawnLocation(), Arrow.class),
+            EquipmentSlot.HAND, 1.0f, true);
+        server.getPluginManager().callEvent(arrowShot);
+        assertEquals(0, player.getCooldown(crossbow));
     }
 
     @Test void blocksConfiguredPlacementsButNotUnrelatedBlocks() {
@@ -210,6 +313,16 @@ class CombatItemListenerTest {
         DamageSource damageSource = DamageSource.builder(DamageType.EXPLOSION)
             .withDirectEntity(source).withDamageLocation(source.getLocation()).build();
         return new EntityDamageEvent(victim, EntityDamageEvent.DamageCause.ENTITY_EXPLOSION, damageSource, damage);
+    }
+
+    private static Material[] spearMaterials() {
+        return new Material[] {Material.WOODEN_SPEAR, Material.STONE_SPEAR, Material.COPPER_SPEAR,
+            Material.IRON_SPEAR, Material.GOLDEN_SPEAR, Material.DIAMOND_SPEAR, Material.NETHERITE_SPEAR};
+    }
+
+    private EntityDamageByEntityEvent maceDamage(Entity victim, DamageType type) {
+        DamageSource source = DamageSource.builder(type).withDirectEntity(player).withCausingEntity(player).build();
+        return new EntityDamageByEntityEvent(player, victim, EntityDamageEvent.DamageCause.ENTITY_ATTACK, source, 10);
     }
 
     private EntityDamageEvent badRespawnDamage(Entity victim, Block source, double damage) {

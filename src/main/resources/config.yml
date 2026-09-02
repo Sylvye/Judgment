@@ -24,6 +24,7 @@ combat-item-cooldowns:
   mace-smash: 0
   riptide: 0
   lunge: 0
+  firework-crossbows: 0
   tnt: 0
   tnt-minecarts: 0
   beds: 0
@@ -38,6 +39,7 @@ combat-item-scopes:
   mace-smash: pvp
   riptide: pvp
   lunge: pvp
+  firework-crossbows: pvp
   tnt: pvp
   tnt-minecarts: pvp
   beds: pvp

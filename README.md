@@ -46,8 +46,9 @@ and Nether toggle locks. Duration changes affect existing waits. Enter `24h`, `1
 
 The **Combat Rules** submenu separates managed items and abilities from explosives. It
 controls elytra entry, elytra firework boosts, ender pearls, mace smashes, riptide,
-spear lunges, and placement of TNT, TNT minecarts, beds, respawn anchors, and end
-crystals. Each rule accepts
+spear lunges, firework-loaded crossbows, and placement of TNT, TNT minecarts, beds,
+respawn anchors, and end crystals. Firework crossbows have a separate rule: positive
+values start their cooldown when fired, while `-1` prevents loading fireworks. Each rule accepts
 `-1` to ban the action, `0` for unrestricted use (the default), or a positive decimal
 number of cooldown seconds. Leaving combat, dying, disconnecting, or restarting the
 server clears active PvP-only item cooldowns. Optional settings show the combat timer and
@@ -207,6 +208,7 @@ combat-item-cooldowns:
   mace-smash: 0
   riptide: 0
   lunge: 0
+  firework-crossbows: 0
   tnt: 0
   tnt-minecarts: 0
   beds: 0
@@ -219,6 +221,7 @@ combat-item-scopes:
   mace-smash: pvp
   riptide: pvp
   lunge: pvp
+  firework-crossbows: pvp
   tnt: pvp
   tnt-minecarts: pvp
   beds: pvp
