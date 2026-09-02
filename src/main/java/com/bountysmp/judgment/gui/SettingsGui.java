@@ -15,6 +15,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.CrossbowMeta;
 import org.bukkit.plugin.Plugin;
 
 import java.math.BigDecimal;
@@ -228,8 +230,17 @@ public final class SettingsGui {
         lore.add(Component.text("Left-click: edit cooldown."));
         lore.add(Component.text("Right-click: toggle scope."));
         if (action.explosive()) lore.add(Component.text("Shift-left-click: edit player damage."));
-        return GuiItems.namedItem(action.icon(),
+        return GuiItems.namedItem(combatRuleIcon(action),
             Component.text(action.displayName() + ": " + formatCombatItemSetting(seconds), settingColor(seconds)), lore);
+    }
+
+    private static ItemStack combatRuleIcon(CombatItemAction action) {
+        if (action != CombatItemAction.FIREWORK_CROSSBOWS) return new ItemStack(action.icon());
+        ItemStack crossbow = new ItemStack(Material.CROSSBOW);
+        CrossbowMeta meta = (CrossbowMeta) crossbow.getItemMeta();
+        meta.addChargedProjectile(new ItemStack(Material.FIREWORK_ROCKET));
+        crossbow.setItemMeta(meta);
+        return crossbow;
     }
 
     public void handleClick(Player admin, int rawSlot, ClickType clickType) {

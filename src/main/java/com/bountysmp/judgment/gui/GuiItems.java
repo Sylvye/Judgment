@@ -16,7 +16,11 @@ final class GuiItems {
     }
 
     static ItemStack namedItem(Material material, Component name, List<Component> lore) {
-        ItemStack item = new ItemStack(material);
+        return namedItem(new ItemStack(material), name, lore);
+    }
+
+    static ItemStack namedItem(ItemStack item, Component name, List<Component> lore) {
+        item = item.clone();
         ItemMeta meta = item.getItemMeta();
         meta.displayName(plain(name));
         meta.lore(lore.stream()
