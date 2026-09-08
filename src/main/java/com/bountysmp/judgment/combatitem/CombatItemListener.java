@@ -221,7 +221,8 @@ public final class CombatItemListener implements Listener {
         if (entityAction != null) return entityAction;
         if (!event.getDamageSource().getDamageType().equals(DamageType.BAD_RESPAWN_POINT)) return null;
         Location source = event.getDamageSource().getSourceLocation();
-        return source == null ? null : imminentBlockExplosions.get(BlockPosition.from(source));
+        return source == null ? null
+            : imminentBlockExplosions.get(BlockPosition.from(source, event.getEntity().getWorld()));
     }
 
     private static CombatItemAction explosiveEntityAction(org.bukkit.entity.Entity entity) {
@@ -306,6 +307,12 @@ public final class CombatItemListener implements Listener {
     private record BlockPosition(UUID worldId, int x, int y, int z) {
         static BlockPosition from(Location location) {
             return new BlockPosition(location.getWorld().getUID(), location.getBlockX(), location.getBlockY(), location.getBlockZ());
+        }
+
+        static BlockPosition from(Location location, World fallbackWorld) {
+            World world = location.getWorld();
+            return new BlockPosition((world == null ? fallbackWorld : world).getUID(),
+                location.getBlockX(), location.getBlockY(), location.getBlockZ());
         }
     }
 }

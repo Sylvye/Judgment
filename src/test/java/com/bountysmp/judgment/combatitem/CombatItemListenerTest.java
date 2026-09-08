@@ -4,6 +4,7 @@ import com.destroystokyo.paper.event.player.PlayerElytraBoostEvent;
 import com.destroystokyo.paper.event.player.PlayerLaunchProjectileEvent;
 import io.papermc.paper.event.entity.EntityLoadCrossbowEvent;
 import io.papermc.paper.event.entity.EntityLungeEvent;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -307,6 +308,25 @@ class CombatItemListenerTest {
         EntityDamageEvent anchorDamage = badRespawnDamage(victim, anchor, 8);
         server.getPluginManager().callEvent(anchorDamage);
         assertEquals(0.0, anchorDamage.getDamage());
+    }
+
+    @Test void tracksBadRespawnDamageWhenSourceLocationHasNoWorld() {
+        settings.set(CombatItemSettings.defaults().withDamageModifier(CombatItemAction.BEDS, 0.5));
+        PlayerMock victim = server.addPlayer("Victim");
+        world.setEnvironment(World.Environment.NETHER);
+        Block bed = world.getBlockAt(10, 64, 10);
+        bed.setType(Material.RED_BED);
+        server.getPluginManager().callEvent(new PlayerInteractEvent(player, Action.RIGHT_CLICK_BLOCK,
+            null, bed, BlockFace.UP, EquipmentSlot.HAND));
+
+        Location worldlessSource = new Location(null, bed.getX(), bed.getY(), bed.getZ());
+        DamageSource damageSource = DamageSource.builder(DamageType.BAD_RESPAWN_POINT)
+            .withDamageLocation(worldlessSource).build();
+        EntityDamageEvent damage = new EntityDamageEvent(victim, EntityDamageEvent.DamageCause.BLOCK_EXPLOSION,
+            damageSource, 8);
+
+        assertDoesNotThrow(() -> server.getPluginManager().callEvent(damage));
+        assertEquals(4.0, damage.getDamage());
     }
 
     private EntityDamageEvent explosion(Entity victim, Entity source, double damage) {
