@@ -37,6 +37,7 @@ public final class PvpCommand implements TabExecutor {
             case UNCHANGED -> status + " No change was needed.";
             case WAIT -> status + " You can change it in " + formatWait(result.waitMillis()) + ".";
             case STORAGE_ERROR -> "PvP status could not be saved. Contact an administrator; no change was made.";
+            case MODULE_DISABLED -> "PvP tags are disabled. PvP is active for everyone and cannot be toggled.";
             case HOLDING_DRAGON_EGG -> status + " You cannot change PvP while holding the dragon egg.";
             case END_DIMENSION -> status + " You cannot change PvP while in the End dimension.";
             case NETHER_DIMENSION -> status + " You cannot change PvP while in the Nether dimension.";
@@ -54,7 +55,7 @@ public final class PvpCommand implements TabExecutor {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        return args.length == 1 ? List.of("on", "off").stream()
+        return service.isModuleEnabled() && args.length == 1 ? List.of("on", "off").stream()
             .filter(value -> value.startsWith(args[0].toLowerCase(Locale.ROOT))).toList() : List.of();
     }
 }

@@ -14,6 +14,11 @@ Judgment declares `softdepend: [LifeStealZ]`. When the credited player is online
 
 ## PvP Status
 
+The PvP Tags module is enabled by default and can be toggled in `/judgment settings`.
+When the module is disabled, PvP is active for everyone, saved preferences are left
+untouched, status commands cannot change them, and `[PvP]` name prefixes are hidden.
+Re-enabling the module restores each player's saved preference.
+
 `/pvp` toggles PvP; `/pvp on` and `/pvp off` set it explicitly. Everyone can use
 these commands. A player carrying a dragon egg cannot change their PvP status until
 the egg is no longer in their inventory. Both players must have PvP **ON** to fight. New preferences default
@@ -234,6 +239,7 @@ combat-item-damage-modifiers:
   respawn-anchors: 1.0
   end-crystals: 1.0
 pvp:
+  enabled: true
   default-enabled: false
   toggle-cooldown-seconds: 86400
   post-combat-delay-seconds: 600

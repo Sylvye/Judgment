@@ -47,6 +47,7 @@ public final class SettingsGui {
     private static final int PVP_DELAY_SLOT = 14;
     private static final int PVP_END_LOCK_SLOT = 16;
     private static final int PVP_NETHER_LOCK_SLOT = 22;
+    private static final int PVP_MODULE_SLOT = 4;
     private static final int COMBAT_RULE_BOSS_BAR_SLOT = 4;
     private static final int COMBAT_RULE_BACK_SLOT = 49;
     private static final CombatItemAction[] MANAGED_ACTIONS = {
@@ -160,6 +161,9 @@ public final class SettingsGui {
         Inventory inventory = Bukkit.createInventory(holder, MODULE_SIZE,
             Component.text("PvP Tag Settings", NamedTextColor.RED));
         holder.setInventory(inventory);
+        inventory.setItem(PVP_MODULE_SLOT, GuiItems.namedItem(Material.REDSTONE_TORCH,
+            Component.text("PvP Tags Module: " + onOff(pvp.enabled()), NamedTextColor.GOLD),
+            List.of(Component.text("When off, PvP is active for everyone without name tags."), Component.text("Click to toggle."))));
         inventory.setItem(PVP_DEFAULT_SLOT, GuiItems.namedItem(Material.LEVER,
             Component.text("Default PvP: " + onOff(pvp.defaultEnabled()), NamedTextColor.RED),
             List.of(Component.text("Applies to new preferences only."), Component.text("Click to toggle."))));
@@ -288,16 +292,21 @@ public final class SettingsGui {
     private void handlePvpClick(Player admin, int slot) {
         PvpSettings old = pvpSettings.get();
         if (slot == BACK_SLOT) open(admin);
+        else if (slot == PVP_MODULE_SLOT) {
+            pvpUpdater.accept(new PvpSettings(!old.enabled(), old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
+                old.preventToggleInEnd(), old.preventToggleInNether()));
+            openPvpTags(admin);
+        }
         else if (slot == PVP_DEFAULT_SLOT) {
-            pvpUpdater.accept(new PvpSettings(!old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
+            pvpUpdater.accept(new PvpSettings(old.enabled(), !old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
                 old.preventToggleInEnd(), old.preventToggleInNether()));
             openPvpTags(admin);
         } else if (slot == PVP_END_LOCK_SLOT) {
-            pvpUpdater.accept(new PvpSettings(old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
+            pvpUpdater.accept(new PvpSettings(old.enabled(), old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
                 !old.preventToggleInEnd(), old.preventToggleInNether()));
             openPvpTags(admin);
         } else if (slot == PVP_NETHER_LOCK_SLOT) {
-            pvpUpdater.accept(new PvpSettings(old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
+            pvpUpdater.accept(new PvpSettings(old.enabled(), old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
                 old.preventToggleInEnd(), !old.preventToggleInNether()));
             openPvpTags(admin);
         } else if (slot == PVP_COOLDOWN_SLOT || slot == PVP_DELAY_SLOT) {
@@ -396,7 +405,7 @@ public final class SettingsGui {
         switch (edit.input()) {
             case PVP_COOLDOWN, PVP_DELAY -> {
                 PvpSettings old = pvpSettings.get();
-                pvpUpdater.accept(new PvpSettings(old.defaultEnabled(),
+                pvpUpdater.accept(new PvpSettings(old.enabled(), old.defaultEnabled(),
                     edit.input() == PendingInput.PVP_COOLDOWN ? millis : old.toggleCooldownMillis(),
                     edit.input() == PendingInput.PVP_DELAY ? millis : old.postCombatDelayMillis(),
                     old.preventToggleInEnd(), old.preventToggleInNether()));

@@ -12,7 +12,7 @@ import java.util.logging.Logger;
 
 /** Access on the server thread. All eligibility timestamps are wall-clock milliseconds. */
 public final class PvpService {
-    public enum Outcome { CHANGED, UNCHANGED, WAIT, STORAGE_ERROR, HOLDING_DRAGON_EGG, END_DIMENSION, NETHER_DIMENSION }
+    public enum Outcome { CHANGED, UNCHANGED, WAIT, STORAGE_ERROR, MODULE_DISABLED, HOLDING_DRAGON_EGG, END_DIMENSION, NETHER_DIMENSION }
     public record Result(Outcome outcome, boolean enabled, long waitMillis) {}
 
     private final PvpStore store;
@@ -71,7 +71,11 @@ public final class PvpService {
     }
 
     public boolean isPvpEnabled(UUID id) {
-        return initialize(id) && states.get(id).enabled();
+        return !settings.get().enabled() || (initialize(id) && states.get(id).enabled());
+    }
+
+    public boolean isModuleEnabled() {
+        return settings.get().enabled();
     }
 
     public boolean canAttack(UUID attacker, UUID victim) {
@@ -79,6 +83,7 @@ public final class PvpService {
     }
 
     public Result change(UUID id, Boolean requested) {
+        if (!settings.get().enabled()) return new Result(Outcome.MODULE_DISABLED, true, 0);
         if (!initialize(id)) return new Result(Outcome.STORAGE_ERROR, savedEnabled(id), 0);
         PvpState old = states.get(id);
         boolean enabled = requested == null ? !old.enabled() : requested;
@@ -106,6 +111,7 @@ public final class PvpService {
 
     /** Administrator correction: deliberately bypasses player cooldown and combat waits. */
     public Result adminSet(UUID id, boolean enabled) {
+        if (!settings.get().enabled()) return new Result(Outcome.MODULE_DISABLED, true, 0);
         if (!initialize(id)) return new Result(Outcome.STORAGE_ERROR, savedEnabled(id), 0);
         PvpState old = states.get(id);
         if (old.enabled() == enabled) return new Result(Outcome.UNCHANGED, enabled, 0);

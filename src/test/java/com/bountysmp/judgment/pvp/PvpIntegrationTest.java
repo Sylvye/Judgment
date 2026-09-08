@@ -104,6 +104,31 @@ class PvpIntegrationTest {
         assertFalse(allowed.isCancelled());
     }
 
+    @Test void moduleToggleForcesPvpOnHidesTagsAndLocksCommandsUntilReenabled() {
+        player.setOp(true);
+        assertTrue(server.dispatchCommand(player, "pvp on"));
+        assertTrue(plain(player.playerListName()).startsWith("[PvP] "));
+
+        server.dispatchCommand(player, "judgment settings");
+        click(12);
+        click(4);
+        assertFalse(plugin.getConfig().getBoolean("pvp.enabled"));
+        assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        assertFalse(plain(player.playerListName()).contains("[PvP]"));
+        assertEquals(List.of(), plugin.getCommand("pvp").tabComplete(player, "pvp", new String[]{""}));
+        assertEquals(List.of(), plugin.getCommand("judgment").tabComplete(player, "judgment", new String[]{"pvp", ""}));
+
+        assertTrue(server.dispatchCommand(player, "pvp off"));
+        assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        assertTrue(server.dispatchCommand(player, "judgment pvp Explorer off"));
+        assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+
+        click(4);
+        assertTrue(plugin.getConfig().getBoolean("pvp.enabled"));
+        assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        assertTrue(plain(player.playerListName()).startsWith("[PvP] "));
+    }
+
     @Test void adminGuiNavigatesModulesEditsSettingsAndReturnsToTheCorrectMenu() {
         player.setOp(true);
         server.dispatchCommand(player, "judgment");
@@ -123,7 +148,7 @@ class PvpIntegrationTest {
 
         click(12);
         assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof PvpTagsMenuHolder);
-        for (int slot : new int[] {10, 12, 14, 16, 22, 26})
+        for (int slot : new int[] {4, 10, 12, 14, 16, 22, 26})
             assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
         click(10);
         assertTrue(plugin.getConfig().getBoolean("pvp.default-enabled"));

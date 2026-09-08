@@ -3,20 +3,26 @@ package com.bountysmp.judgment.pvp;
 import org.bukkit.configuration.file.FileConfiguration;
 import java.util.logging.Logger;
 
-public record PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
+public record PvpSettings(boolean enabled, boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
                           boolean preventToggleInEnd, boolean preventToggleInNether) {
-    /** Backwards-compatible constructor for modules that do not configure the End lock. */
     public PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis) {
-        this(defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, false, false);
+        this(true, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, false, false);
+    }
+
+    /** Backwards-compatible constructor for modules that do not configure the End lock. */
+    public PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
+                       boolean preventToggleInEnd) {
+        this(true, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, preventToggleInEnd, false);
     }
 
     public PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
-                       boolean preventToggleInEnd) {
-        this(defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, preventToggleInEnd, false);
+                       boolean preventToggleInEnd, boolean preventToggleInNether) {
+        this(true, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, preventToggleInEnd, preventToggleInNether);
     }
 
     public static PvpSettings fromConfig(FileConfiguration config, Logger logger) {
-        return new PvpSettings(config.getBoolean("pvp.default-enabled", false),
+        return new PvpSettings(config.getBoolean("pvp.enabled", true),
+            config.getBoolean("pvp.default-enabled", false),
             duration(config, "pvp.toggle-cooldown-seconds", 86_400L, logger),
             duration(config, "pvp.post-combat-delay-seconds", 600L, logger),
             config.getBoolean("pvp.prevent-toggle-in-end", false),

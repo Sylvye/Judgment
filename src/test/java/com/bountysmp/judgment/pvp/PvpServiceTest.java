@@ -70,6 +70,19 @@ class PvpServiceTest {
         assertFalse(service.canAttack(a, b));
     }
 
+    @Test void disabledModuleForcesPvpOnAndPreservesSavedPreference() {
+        assertFalse(service.isPvpEnabled(a));
+        settings.set(new PvpSettings(false, false, 0, 0, false, false));
+        assertTrue(service.isPvpEnabled(a));
+        assertTrue(service.isPvpEnabled(b));
+        assertTrue(service.canAttack(a, b));
+        assertEquals(PvpService.Outcome.MODULE_DISABLED, service.change(a, true).outcome());
+        assertEquals(PvpService.Outcome.MODULE_DISABLED, service.adminSet(a, true).outcome());
+        settings.set(new PvpSettings(true, false, 0, 0, false, false));
+        assertFalse(service.isPvpEnabled(a));
+        assertFalse(service.isPvpEnabled(b));
+    }
+
     @Test void combatWaitStartsAtExpiryAndSurvivesRestart() {
         settings.set(new PvpSettings(true, 0, 600_000));
         service.recordCombat(a, b, 30_000);
@@ -160,6 +173,9 @@ class PvpServiceTest {
         assertFalse(service.canAttack(a, b));
         assertEquals(PvpService.Outcome.STORAGE_ERROR, service.change(a, true).outcome());
         assertEquals(corrupt, Files.readString(path));
+        settings.set(new PvpSettings(false, false, 0, 0, false, false));
+        assertTrue(service.canAttack(a, b));
+        assertEquals(PvpService.Outcome.MODULE_DISABLED, service.change(a, true).outcome());
     }
 
     @Test void invalidAndOverflowingDurationsAreRejected() {

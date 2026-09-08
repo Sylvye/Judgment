@@ -61,6 +61,8 @@ public final class JudgmentCommand implements CommandExecutor, TabCompleter {
                 : pvpService.adminSet(target.getUniqueId(), enabled);
             if (result.outcome() == PvpService.Outcome.STORAGE_ERROR) {
                 sender.sendMessage(Component.text("PvP status could not be saved; no change was made.", NamedTextColor.RED));
+            } else if (result.outcome() == PvpService.Outcome.MODULE_DISABLED) {
+                sender.sendMessage(Component.text("PvP tags are disabled. PvP is active for everyone and cannot be toggled.", NamedTextColor.YELLOW));
             } else {
                 pvpRefresh.accept(target);
                 sender.sendMessage(Component.text(target.getName() + " PvP is now " + (result.enabled() ? "ON" : "OFF") + ".", NamedTextColor.GREEN));
@@ -123,16 +125,19 @@ public final class JudgmentCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1 && sender.hasPermission("judgment.admin")) {
             String prefix = args[0].toLowerCase(Locale.ROOT);
             return Arrays.asList("settings", "debug", "pvp").stream()
+                .filter(value -> !value.equals("pvp") || (pvpService != null && pvpService.isModuleEnabled()))
                 .filter(value -> value.startsWith(prefix))
                 .toList();
         }
-        if (args.length == 2 && sender.hasPermission("judgment.admin") && args[0].equalsIgnoreCase("pvp")) {
+        if (args.length == 2 && sender.hasPermission("judgment.admin") && args[0].equalsIgnoreCase("pvp")
+            && pvpService != null && pvpService.isModuleEnabled()) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
             return Bukkit.getOnlinePlayers().stream().map(Player::getName)
                 .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
                 .sorted(String.CASE_INSENSITIVE_ORDER).toList();
         }
-        if (args.length == 3 && sender.hasPermission("judgment.admin") && args[0].equalsIgnoreCase("pvp")) {
+        if (args.length == 3 && sender.hasPermission("judgment.admin") && args[0].equalsIgnoreCase("pvp")
+            && pvpService != null && pvpService.isModuleEnabled()) {
             return Arrays.asList("on", "off").stream().filter(value -> value.startsWith(args[2].toLowerCase(Locale.ROOT))).toList();
         }
         if (args.length == 2 && sender.hasPermission("judgment.admin") && args[0].equalsIgnoreCase("debug")) {

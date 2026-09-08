@@ -31,7 +31,7 @@ public final class PvpPresentation {
         boards.add(Bukkit.getScoreboardManager().getMainScoreboard());
         for (Player viewer : Bukkit.getOnlinePlayers()) boards.add(viewer.getScoreboard());
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (service.isPvpEnabled(player.getUniqueId())) {
+            if (service.isModuleEnabled() && service.isPvpEnabled(player.getUniqueId())) {
                 if (!tabs.containsKey(player.getUniqueId())) {
                     Component original = player.playerListName();
                     Component applied = PREFIX.append((original == null ? Component.text(player.getName()) : original).colorIfAbsent(NamedTextColor.WHITE));

@@ -56,6 +56,8 @@ combat-item-damage-modifiers:
 
 # Defaults apply only to players without saved preferences.
 pvp:
+  # Disable the opt-in/tag system while keeping PvP active for every player.
+  enabled: true
   default-enabled: false
   toggle-cooldown-seconds: 86400
   # Counted after the final combat tag ends, including offline time.

@@ -118,12 +118,15 @@ public class JudgmentPlugin extends JavaPlugin {
 
     private void setPvpSettings(PvpSettings updated) {
         pvpSettings = updated;
+        getConfig().set("pvp.enabled", updated.enabled());
         getConfig().set("pvp.default-enabled", updated.defaultEnabled());
         getConfig().set("pvp.toggle-cooldown-seconds", updated.toggleCooldownMillis() / 1_000.0);
         getConfig().set("pvp.post-combat-delay-seconds", updated.postCombatDelayMillis() / 1_000.0);
         getConfig().set("pvp.prevent-toggle-in-end", updated.preventToggleInEnd());
         getConfig().set("pvp.prevent-toggle-in-nether", updated.preventToggleInNether());
         saveConfig();
+        if (pvpPresentation != null) pvpPresentation.refreshAll();
+        if (dragonEggPrivilege != null) for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
     }
 
     private void setDragonEggSettings(DragonEggSettings updated) {
