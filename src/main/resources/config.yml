@@ -66,6 +66,9 @@ pvp:
   prevent-toggle-in-end: false
   # Prevent players from changing PvP status while in the Nether dimension.
   prevent-toggle-in-nether: false
+  # Block damage credited to another player unless both players have PvP enabled.
+  # Includes projectiles, pets, TNT, minecarts, beds, respawn anchors, and end crystals.
+  protect-untagged-from-player-damage: true
   dragon-egg:
     # Disabled until an administrator enables the privilege.
     enabled: false

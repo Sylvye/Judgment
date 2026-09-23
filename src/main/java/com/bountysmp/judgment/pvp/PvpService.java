@@ -78,6 +78,10 @@ public final class PvpService {
         return settings.get().enabled();
     }
 
+    public boolean protectsUntaggedFromPlayerDamage() {
+        return settings.get().protectUntaggedFromPlayerDamage();
+    }
+
     public boolean canAttack(UUID attacker, UUID victim) {
         return attacker.equals(victim) || (isPvpEnabled(attacker) && isPvpEnabled(victim));
     }

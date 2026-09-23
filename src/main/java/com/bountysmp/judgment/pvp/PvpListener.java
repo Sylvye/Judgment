@@ -6,10 +6,13 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import io.papermc.paper.event.entity.EntityPushedByEntityAttackEvent;
 import org.bukkit.entity.*;
+import org.bukkit.entity.minecart.ExplosiveMinecart;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.*;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
@@ -26,6 +29,8 @@ public final class PvpListener implements Listener {
     private final JudgmentService combat;
     private final PvpPresentation presentation;
     private final Map<UUID, Long> lastNotice = new HashMap<>();
+    private final Map<UUID, UUID> explosiveAttackers = new HashMap<>();
+    private final Map<BlockPosition, UUID> blockExplosionAttackers = new HashMap<>();
 
     public PvpListener(Plugin plugin, PvpService pvp, JudgmentService combat, PvpPresentation presentation) {
         this.plugin = plugin;
@@ -45,6 +50,8 @@ public final class PvpListener implements Listener {
         if (entity instanceof Projectile projectile && projectile.getShooter() instanceof Entity shooter)
             return responsiblePlayer(shooter, depth + 1);
         if (entity instanceof TNTPrimed tnt) return responsiblePlayer(tnt.getSource(), depth + 1);
+        UUID explosiveAttacker = explosiveAttackers.get(entity.getUniqueId());
+        if (explosiveAttacker != null) return explosiveAttacker;
         if (entity instanceof AreaEffectCloud cloud) {
             if (cloud.getSource() instanceof Entity source) return responsiblePlayer(source, depth + 1);
             return cloud.getOwnerUniqueId();
@@ -56,11 +63,14 @@ public final class PvpListener implements Listener {
         UUID id = responsiblePlayer(event.getDamageSource().getCausingEntity());
         if (id == null) id = responsiblePlayer(event.getDamageSource().getDirectEntity());
         if (id == null && event instanceof EntityDamageByEntityEvent byEntity) id = responsiblePlayer(byEntity.getDamager());
+        if (id == null && event.getDamageSource().getSourceLocation() != null)
+            id = blockExplosionAttackers.get(BlockPosition.from(event.getDamageSource().getSourceLocation()));
         return id;
     }
 
     private boolean blocked(UUID attacker, Player victim) {
-        if (attacker == null || combat.isExecutingPunishment(victim.getUniqueId())) return false;
+        if (!pvp.protectsUntaggedFromPlayerDamage() || attacker == null
+            || combat.isExecutingPunishment(victim.getUniqueId())) return false;
         if (pvp.canAttack(attacker, victim.getUniqueId())) return false;
         Player player = Bukkit.getPlayer(attacker);
         long now = System.currentTimeMillis();
@@ -69,6 +79,31 @@ public final class PvpListener implements Listener {
             lastNotice.put(attacker, now);
         }
         return true;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void trackExplosiveAttacker(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof EnderCrystal || event.getEntity() instanceof ExplosiveMinecart)) return;
+        UUID attacker = responsiblePlayer(event.getDamager());
+        if (attacker == null) return;
+        UUID explosive = event.getEntity().getUniqueId();
+        explosiveAttackers.put(explosive, attacker);
+        Bukkit.getScheduler().runTask(plugin, () -> explosiveAttackers.remove(explosive, attacker));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void trackBlockExplosionAttacker(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
+        var block = event.getClickedBlock();
+        boolean bed = org.bukkit.Tag.BEDS.isTagged(block.getType())
+            && event.getPlayer().getWorld().getEnvironment() != org.bukkit.World.Environment.NORMAL;
+        boolean anchor = block.getType() == org.bukkit.Material.RESPAWN_ANCHOR
+            && event.getPlayer().getWorld().getEnvironment() != org.bukkit.World.Environment.NETHER;
+        if (!bed && !anchor) return;
+        BlockPosition position = BlockPosition.from(block.getLocation());
+        UUID attacker = event.getPlayer().getUniqueId();
+        blockExplosionAttackers.put(position, attacker);
+        Bukkit.getScheduler().runTask(plugin, () -> blockExplosionAttackers.remove(position, attacker));
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -154,5 +189,11 @@ public final class PvpListener implements Listener {
     @EventHandler
     public void onDeath(PlayerDeathEvent event) {
         pvp.handleDeath(event.getEntity().getUniqueId());
+    }
+
+    private record BlockPosition(UUID world, int x, int y, int z) {
+        private static BlockPosition from(org.bukkit.Location location) {
+            return new BlockPosition(location.getWorld().getUID(), location.getBlockX(), location.getBlockY(), location.getBlockZ());
+        }
     }
 }

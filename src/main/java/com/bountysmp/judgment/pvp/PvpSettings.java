@@ -4,20 +4,27 @@ import org.bukkit.configuration.file.FileConfiguration;
 import java.util.logging.Logger;
 
 public record PvpSettings(boolean enabled, boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
-                          boolean preventToggleInEnd, boolean preventToggleInNether) {
+                          boolean preventToggleInEnd, boolean preventToggleInNether,
+                          boolean protectUntaggedFromPlayerDamage) {
     public PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis) {
-        this(true, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, false, false);
+        this(true, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, false, false, true);
     }
 
     /** Backwards-compatible constructor for modules that do not configure the End lock. */
     public PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
                        boolean preventToggleInEnd) {
-        this(true, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, preventToggleInEnd, false);
+        this(true, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, preventToggleInEnd, false, true);
     }
 
     public PvpSettings(boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
                        boolean preventToggleInEnd, boolean preventToggleInNether) {
-        this(true, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, preventToggleInEnd, preventToggleInNether);
+        this(true, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis, preventToggleInEnd, preventToggleInNether, true);
+    }
+
+    public PvpSettings(boolean enabled, boolean defaultEnabled, long toggleCooldownMillis, long postCombatDelayMillis,
+                       boolean preventToggleInEnd, boolean preventToggleInNether) {
+        this(enabled, defaultEnabled, toggleCooldownMillis, postCombatDelayMillis,
+            preventToggleInEnd, preventToggleInNether, true);
     }
 
     public static PvpSettings fromConfig(FileConfiguration config, Logger logger) {
@@ -26,7 +33,8 @@ public record PvpSettings(boolean enabled, boolean defaultEnabled, long toggleCo
             duration(config, "pvp.toggle-cooldown-seconds", 86_400L, logger),
             duration(config, "pvp.post-combat-delay-seconds", 600L, logger),
             config.getBoolean("pvp.prevent-toggle-in-end", false),
-            config.getBoolean("pvp.prevent-toggle-in-nether", false));
+            config.getBoolean("pvp.prevent-toggle-in-nether", false),
+            config.getBoolean("pvp.protect-untagged-from-player-damage", true));
     }
 
     private static long duration(FileConfiguration config, String key, long fallback, Logger logger) {

@@ -119,6 +119,27 @@ class PvpListenerTest {
         assertTrue(explosion.isCancelled());
     }
 
+    @Test void endCrystalDamageIsAttributedToThePlayerWhoDetonatedIt() {
+        EnderCrystal crystal = world.spawn(world.getSpawnLocation(), EnderCrystal.class);
+        listener.trackExplosiveAttacker(new EntityDamageByEntityEvent(a, crystal,
+            EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+            DamageSource.builder(DamageType.PLAYER_ATTACK).withCausingEntity(a).build(), 1));
+        var explosion = new EntityDamageEvent(b, EntityDamageEvent.DamageCause.ENTITY_EXPLOSION,
+            DamageSource.builder(DamageType.EXPLOSION).withDirectEntity(crystal).build(), 5);
+        server.getPluginManager().callEvent(explosion);
+        assertTrue(explosion.isCancelled());
+    }
+
+    @Test void playerDamageProtectionCanBeDisabled() {
+        pvp = new PvpService(new PvpStore(directory.resolve("disabled-protection.yml")),
+            () -> new PvpSettings(true, false, 0, 0, false, false, false), now::get,
+            id -> combat.getCombatTag(id).isPresent(), plugin.getLogger());
+        listener = new PvpListener(plugin, pvp, combat, new PvpPresentation(pvp));
+        var event = hit(a, a, 2);
+        listener.protectDamage(event);
+        assertFalse(event.isCancelled());
+    }
+
     @Test void fireAndKnockbackAreBlockedButEnvironmentalDamageIsNot() {
         var fire = new EntityCombustByEntityEvent(a, b, 5.0f);
         server.getPluginManager().callEvent(fire);

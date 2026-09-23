@@ -47,6 +47,7 @@ public final class SettingsGui {
     private static final int PVP_DELAY_SLOT = 14;
     private static final int PVP_END_LOCK_SLOT = 16;
     private static final int PVP_NETHER_LOCK_SLOT = 22;
+    private static final int PVP_DAMAGE_PROTECTION_SLOT = 20;
     private static final int PVP_MODULE_SLOT = 4;
     private static final int COMBAT_RULE_BOSS_BAR_SLOT = 4;
     private static final int COMBAT_RULE_BACK_SLOT = 49;
@@ -179,6 +180,10 @@ public final class SettingsGui {
         inventory.setItem(PVP_NETHER_LOCK_SLOT, GuiItems.namedItem(Material.NETHERRACK,
             Component.text("Nether PvP Toggle Lock: " + onOff(pvp.preventToggleInNether()), NamedTextColor.DARK_RED),
             List.of(Component.text("Prevent PvP status changes in the Nether."), Component.text("Click to toggle."))));
+        inventory.setItem(PVP_DAMAGE_PROTECTION_SLOT, GuiItems.namedItem(Material.TOTEM_OF_UNDYING,
+            Component.text("Untagged Player-Damage Protection: " + onOff(pvp.protectUntaggedFromPlayerDamage()), NamedTextColor.AQUA),
+            List.of(Component.text("Block player-credited damage, including explosions, unless both players have PvP on."),
+                Component.text("Click to toggle."))));
         addBack(inventory);
         admin.openInventory(inventory);
     }
@@ -294,20 +299,24 @@ public final class SettingsGui {
         if (slot == BACK_SLOT) open(admin);
         else if (slot == PVP_MODULE_SLOT) {
             pvpUpdater.accept(new PvpSettings(!old.enabled(), old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
-                old.preventToggleInEnd(), old.preventToggleInNether()));
+                old.preventToggleInEnd(), old.preventToggleInNether(), old.protectUntaggedFromPlayerDamage()));
             openPvpTags(admin);
         }
         else if (slot == PVP_DEFAULT_SLOT) {
             pvpUpdater.accept(new PvpSettings(old.enabled(), !old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
-                old.preventToggleInEnd(), old.preventToggleInNether()));
+                old.preventToggleInEnd(), old.preventToggleInNether(), old.protectUntaggedFromPlayerDamage()));
             openPvpTags(admin);
         } else if (slot == PVP_END_LOCK_SLOT) {
             pvpUpdater.accept(new PvpSettings(old.enabled(), old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
-                !old.preventToggleInEnd(), old.preventToggleInNether()));
+                !old.preventToggleInEnd(), old.preventToggleInNether(), old.protectUntaggedFromPlayerDamage()));
             openPvpTags(admin);
         } else if (slot == PVP_NETHER_LOCK_SLOT) {
             pvpUpdater.accept(new PvpSettings(old.enabled(), old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
-                old.preventToggleInEnd(), !old.preventToggleInNether()));
+                old.preventToggleInEnd(), !old.preventToggleInNether(), old.protectUntaggedFromPlayerDamage()));
+            openPvpTags(admin);
+        } else if (slot == PVP_DAMAGE_PROTECTION_SLOT) {
+            pvpUpdater.accept(new PvpSettings(old.enabled(), old.defaultEnabled(), old.toggleCooldownMillis(), old.postCombatDelayMillis(),
+                old.preventToggleInEnd(), old.preventToggleInNether(), !old.protectUntaggedFromPlayerDamage()));
             openPvpTags(admin);
         } else if (slot == PVP_COOLDOWN_SLOT || slot == PVP_DELAY_SLOT) {
             PendingInput input = slot == PVP_COOLDOWN_SLOT ? PendingInput.PVP_COOLDOWN : PendingInput.PVP_DELAY;
