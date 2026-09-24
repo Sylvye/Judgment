@@ -2,6 +2,7 @@ package com.bountysmp.judgment.pvp;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
@@ -10,17 +11,21 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 public final class PvpPresentation {
     private static final Component PREFIX = Component.text("[", NamedTextColor.GRAY)
         .append(Component.text("PvP", NamedTextColor.RED))
         .append(Component.text("] ", NamedTextColor.GRAY));
+    private static final Pattern TEAM_NAME = Pattern.compile("judp[0-9a-f]{12}");
     private record TeamChange(String original, Team derived) {}
     private record TabChange(Component original, Component applied) {}
     private final PvpService service;
     private final Map<Scoreboard, Map<String, TeamChange>> teams = new IdentityHashMap<>();
     private final Map<UUID, TabChange> tabs = new HashMap<>();
+    private final Set<Scoreboard> reconciledBoards = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
 
     public PvpPresentation(PvpService service) {
         this.service = service;
@@ -30,6 +35,7 @@ public final class PvpPresentation {
         var boards = new HashSet<Scoreboard>();
         boards.add(Bukkit.getScoreboardManager().getMainScoreboard());
         for (Player viewer : Bukkit.getOnlinePlayers()) boards.add(viewer.getScoreboard());
+        for (Scoreboard board : boards) reconcile(board);
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (service.isModuleEnabled() && service.isPvpEnabled(player.getUniqueId())) {
                 if (!tabs.containsKey(player.getUniqueId())) {
@@ -41,6 +47,17 @@ public final class PvpPresentation {
                 for (Scoreboard board : boards) applyTeam(board, player);
             } else {
                 remove(player);
+            }
+        }
+    }
+
+    private void reconcile(Scoreboard board) {
+        if (!reconciledBoards.add(board)) return;
+        // Scoreboard teams survive restarts, but our in-memory ownership map does not.
+        for (Team team : Set.copyOf(board.getTeams())) {
+            if (TEAM_NAME.matcher(team.getName()).matches()
+                && PlainTextComponentSerializer.plainText().serialize(team.prefix()).startsWith("[PvP] ")) {
+                team.unregister();
             }
         }
     }
@@ -98,5 +115,6 @@ public final class PvpPresentation {
         for (Player player : Bukkit.getOnlinePlayers()) remove(player);
         teams.clear();
         tabs.clear();
+        reconciledBoards.clear();
     }
 }

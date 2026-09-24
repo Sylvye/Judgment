@@ -25,6 +25,7 @@ import org.bukkit.plugin.Plugin;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PvpListenerTest {
@@ -85,6 +86,43 @@ class PvpListenerTest {
         assertFalse(onOn.isCancelled());
         assertEquals(1, combat.getCombatStack(a.getUniqueId()).size());
         assertEquals(1, combat.getCombatStack(b.getUniqueId()).size());
+    }
+
+    @Test void disabledModuleAllowsDamageDespiteSavedOffPreference() {
+        a.setGameMode(org.bukkit.GameMode.SURVIVAL);
+        b.setGameMode(org.bukkit.GameMode.SURVIVAL);
+        var settings = new AtomicReference<>(new PvpSettings(true, false, 0, 0, false, false));
+        var service = new PvpService(new PvpStore(directory.resolve("module-toggle.yml")), settings::get,
+            now::get, id -> false, plugin.getLogger());
+        var protection = new PvpListener(plugin, service, combat, new PvpPresentation(service));
+        service.change(a.getUniqueId(), true);
+
+        var blocked = hit(a, a, 2);
+        protection.protectDamage(blocked);
+        assertTrue(blocked.isCancelled());
+        var blockedReverse = new EntityDamageByEntityEvent(b, a, EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+            DamageSource.builder(DamageType.PLAYER_ATTACK).withDirectEntity(b).withCausingEntity(b).build(), 2);
+        protection.protectDamage(blockedReverse);
+        assertTrue(blockedReverse.isCancelled());
+
+        service.change(b.getUniqueId(), true);
+        var allowed = hit(a, a, 2);
+        protection.protectDamage(allowed);
+        assertFalse(allowed.isCancelled());
+        var allowedReverse = new EntityDamageByEntityEvent(b, a, EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+            DamageSource.builder(DamageType.PLAYER_ATTACK).withDirectEntity(b).withCausingEntity(b).build(), 2);
+        protection.protectDamage(allowedReverse);
+        assertFalse(allowedReverse.isCancelled());
+
+        service.change(b.getUniqueId(), false);
+        settings.set(new PvpSettings(false, false, 0, 0, false, false));
+        var moduleOff = hit(a, a, 2);
+        protection.protectDamage(moduleOff);
+        assertFalse(moduleOff.isCancelled());
+        var moduleOffReverse = new EntityDamageByEntityEvent(b, a, EntityDamageEvent.DamageCause.ENTITY_ATTACK,
+            DamageSource.builder(DamageType.PLAYER_ATTACK).withDirectEntity(b).withCausingEntity(b).build(), 2);
+        protection.protectDamage(moduleOffReverse);
+        assertFalse(moduleOffReverse.isCancelled());
     }
 
     @Test void cancelledAndZeroDamageDoNotTag() {
