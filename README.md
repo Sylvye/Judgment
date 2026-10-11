@@ -9,8 +9,9 @@ When enabled in the settings menu, Judgment replaces an invisible killer's name 
 - Minecraft/Paper `26.2`
 - Java 25
 - Optional: LifeStealZ
+- Optional: EasyEnchants (updated alongside Judgment for drag-and-drop enchantment rules)
 
-Judgment declares `softdepend: [LifeStealZ]`. When the credited player is online, punishment kills are applied as player-caused kills so LifeStealZ can read normal Bukkit kill credit.
+Judgment declares `softdepend: [LifeStealZ, EasyEnchants]`. When the credited player is online, punishment kills are applied as player-caused kills so LifeStealZ can read normal Bukkit kill credit.
 
 ## PvP Status
 
@@ -87,6 +88,55 @@ held and are removed when the player no longer has one. The plugin marks only it
 effects, so unrelated potion effects are preserved. This privilege is cosmetic and
 does not change who may pick up an egg.
 
+## Enchantment Rules
+
+Open **Enchantment Rules** in `/judgment settings` to manage any enchantment registered
+on the server, including custom enchantments. Click an enchantment and enter `-1` to
+ban it, `0` for unrestricted, or an integer from `1` through `255` for its maximum
+level. Rules apply globally to gear, including admins and creative players. The module starts
+enabled with no restrictions and has an on/off toggle. GUI changes save and apply immediately;
+configuration-file edits require a restart.
+
+For example, this configuration bans Wind Burst and caps Sharpness at III:
+
+```yaml
+enchantment-rules:
+  enabled: true
+  limits:
+    "minecraft:wind_burst": -1
+    "minecraft:sharpness": 3
+```
+
+Excessive levels are reduced, and banned enchantments are removed from gear.
+Enchanted books remain unchanged, including when enchanted at a table, combined in
+an anvil, traded, or moved through storage. Restrictions are enforced on the resulting
+gear when a book is applied; the source book's enchantments are preserved. Tables,
+anvils, crafting, smithing, grindstones, trading, loot, creative input, pickups, and
+hopper transfers are checked for gear. Gear inside bundles and shulker boxes is
+corrected too. Anvil operations that make no effective change are
+blocked; useful renames and repairs remain available. Valid operations keep vanilla costs.
+
+Online inventories, armor, offhand, cursors, and ender chests are corrected when rules
+change and reconciled every second to catch commands and external plugin changes.
+Storage is corrected when opened or its chunk loads; loaded chunks are also queued
+for gradual cleanup after setting changes. Offline inventories are corrected on join,
+without rewriting offline player files or loading additional chunks. Unopened loot is
+filtered when generated. Disabling or relaxing rules does not restore enchantments
+already removed or levels already reduced.
+
+With the updated EasyEnchants plugin installed, drag-and-drop book applications are
+checked before gear changes or book consumption. Banned entries are skipped, merged
+levels are capped, and a book is kept if it adds no allowed enchantment. Mixed books
+still apply their allowed entries. Source books and book-to-book combining remain
+unrestricted. Replace both plugin jars and restart to enable this integration.
+
+To verify in-game, set Sharpness to `3` and Wind Burst to `-1`, then check table offers,
+book application and equal-level anvil merging, mixed-enchantment books, shift-click
+and number-key result transfers, creative input, and hopper movement. Confirm blocked
+table/anvil operations consume no resources, valid renames/repairs still work, and
+gear in storage, nested containers, and reconnecting inventories is corrected while
+enchanted books retain their original enchantments.
+
 ## Combat Tags
 
 Judgment tracks combat with a per-player stack of directional tags.
@@ -156,6 +206,7 @@ Editable settings:
 - **PvP Tags:** default status, toggle cooldown, post-combat wait, End lock, and Nether lock
 - **Combat Rules:** cooldown boss bars, per-rule cooldowns/bans/scopes, and explosive player-damage modifiers
 - **Dragon Egg:** privilege and individual effect toggles
+- **Enchantment Rules:** gear enchantment bans, maximum levels, and module toggle
 
 Displayed but locked for now:
 
@@ -264,6 +315,9 @@ Current supported behavior is `relog`.
 ## Build
 
 Use JDK 25. The included Gradle wrapper downloads Gradle 9.1.0 automatically.
+Keep the EasyEnchants source checkout at `../EasyEnchants`; Gradle compiles its public
+event API as a separate dependency. EasyEnchants classes are not bundled in Judgment.
+JDK 21 must also be available for the EasyEnchants build.
 
 macOS/Linux:
 

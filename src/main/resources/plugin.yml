@@ -4,7 +4,7 @@ main: com.bountysmp.judgment.JudgmentPlugin
 api-version: '26.2'
 authors: [Sylvye]
 description: Survival-friendly combat log judgment system.
-softdepend: [LifeStealZ]
+softdepend: [LifeStealZ, EasyEnchants]
 commands:
   pvp:
     description: Toggle your PvP status.

@@ -2,6 +2,9 @@ package com.bountysmp.judgment;
 
 import com.bountysmp.judgment.command.JudgmentCommand;
 import com.bountysmp.judgment.combatitem.*;
+import com.bountysmp.judgment.enchantment.EnchantmentSettings;
+import com.bountysmp.judgment.enchantment.EnchantmentController;
+import com.bountysmp.judgment.enchantment.EasyEnchantsIntegration;
 import com.bountysmp.judgment.pvp.*;
 import com.bountysmp.judgment.config.JudgmentSettings;
 import com.bountysmp.judgment.gui.SettingsGui;
@@ -30,6 +33,8 @@ public class JudgmentPlugin extends JavaPlugin {
     private CombatItemCooldownManager combatItemCooldownManager;
     private CombatBossBarController combatBossBarController;
     private NativeWeaponCooldownController nativeWeaponCooldownController;
+    private EnchantmentSettings enchantmentSettings;
+    private EnchantmentController enchantmentController;
 
     public PvpService getPvpService() {
         return pvpService;
@@ -49,6 +54,7 @@ public class JudgmentPlugin extends JavaPlugin {
         pvpSettings = PvpSettings.fromConfig(getConfig(), getLogger());
         dragonEggSettings = DragonEggSettings.fromConfig(getConfig(), getLogger());
         combatItemSettings = CombatItemSettings.fromConfig(getConfig(), getLogger());
+        enchantmentSettings = EnchantmentSettings.fromConfig(getConfig(), getLogger());
         pvpService = new PvpService(new PvpStore(getDataFolder().toPath().resolve("pvp-players.yml")),
             () -> pvpSettings, System::currentTimeMillis,
             id -> judgmentService.getCombatTag(id).isPresent(),
@@ -73,7 +79,18 @@ public class JudgmentPlugin extends JavaPlugin {
             () -> pvpSettings, this::setPvpSettings, () -> dragonEggSettings, this::setDragonEggSettings,
             () -> combatItemSettings, this::setCombatItemSetting, this::setCombatItemScope,
             this::setCombatItemDamageModifier,
-            this::setItemCooldownBossBars, this::setCombatTimerBossBar);
+            this::setItemCooldownBossBars, this::setCombatTimerBossBar,
+            () -> enchantmentSettings, this::setEnchantmentSettings);
+        enchantmentController = new EnchantmentController(this, () -> enchantmentSettings);
+        getServer().getPluginManager().registerEvents(enchantmentController, this);
+        if (getServer().getPluginManager().isPluginEnabled("EasyEnchants")) {
+            try {
+                getServer().getPluginManager().registerEvents(new EasyEnchantsIntegration(() -> enchantmentSettings), this);
+            } catch (LinkageError error) {
+                getLogger().warning("Update EasyEnchants to enable immediate enchantment-rule enforcement for drag-and-drop books.");
+            }
+        }
+        enchantmentController.rulesChanged();
         PvpCommand pvpCommand = new PvpCommand(pvpService, player -> pvpPresentation.refreshAll());
         PluginCommand pvp = Objects.requireNonNull(getCommand("pvp"), "pvp command missing from plugin.yml");
         pvp.setExecutor(pvpCommand);
@@ -104,6 +121,7 @@ public class JudgmentPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (enchantmentController != null) enchantmentController.close();
         if (nativeWeaponCooldownController != null) nativeWeaponCooldownController.close();
         if (combatBossBarController != null) combatBossBarController.close();
         if (pvpPresentation != null) pvpPresentation.close();
@@ -128,6 +146,18 @@ public class JudgmentPlugin extends JavaPlugin {
         saveConfig();
         if (pvpPresentation != null) pvpPresentation.refreshAll();
         if (dragonEggPrivilege != null) for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
+    }
+
+    private void setEnchantmentSettings(EnchantmentSettings updated) {
+        enchantmentSettings = updated;
+        getConfig().set(EnchantmentSettings.CONFIG_ROOT + ".enabled", updated.enabled());
+        // Preserve literal IDs (including dots in custom keys) and unrecognized config entries.
+        java.util.Map<String, Object> limits = new java.util.LinkedHashMap<>();
+        limits.putAll(EnchantmentSettings.configuredLimits(getConfig()));
+        updated.limits().forEach((key, limit) -> limits.put(key.toString(), limit));
+        getConfig().set(EnchantmentSettings.CONFIG_ROOT + ".limits", limits);
+        saveConfig();
+        enchantmentController.rulesChanged();
     }
 
     private void setDragonEggSettings(DragonEggSettings updated) {

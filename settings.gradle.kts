@@ -16,3 +16,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Judgment"
+
+// Optional runtime integration, compiled against the sibling plugin's public event API.
+includeBuild("../EasyEnchants")

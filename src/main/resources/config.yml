@@ -10,6 +10,14 @@ prompt-timeout-seconds: 10
 # Hide an invisible killer's identity in the public death message while preserving kill credit.
 invisible-killer-obfuscation: false
 
+# Global gear rules for any registered enchantment. Enchanted books remain unrestricted.
+# -1 bans, 0 is unrestricted, 1–255 sets the maximum level. Missing entries are unrestricted.
+# Examples: "minecraft:wind_burst": -1, "minecraft:sharpness": 3
+# Book enchantments are checked when applied to gear; existing gear is corrected on access.
+enchantment-rules:
+  enabled: true
+  limits: {}
+
 bossbars:
   # Show one decreasing bar for every active combat item cooldown.
   item-cooldowns: false

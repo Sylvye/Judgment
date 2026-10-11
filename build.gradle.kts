@@ -35,6 +35,8 @@ java {
 }
 
 dependencies {
+    compileOnly("me.easyenchants:EasyEnchants:26.2")
+    testImplementation("me.easyenchants:EasyEnchants:26.2")
     compileOnly("io.papermc.paper:paper-api:26.2.build.120-stable")
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))

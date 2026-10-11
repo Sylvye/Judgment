@@ -4,6 +4,9 @@ import com.bountysmp.judgment.combatitem.CombatItemAction;
 import com.bountysmp.judgment.combatitem.CombatItemScope;
 import com.bountysmp.judgment.combatitem.CombatItemSettings;
 import com.bountysmp.judgment.config.JudgmentSettings;
+import com.bountysmp.judgment.enchantment.EnchantmentSettings;
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
 import com.bountysmp.judgment.pvp.DragonEggSettings;
 import com.bountysmp.judgment.pvp.PvpSettings;
 import com.bountysmp.judgment.util.DurationParser;
@@ -11,6 +14,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.inventory.Inventory;
@@ -37,6 +41,8 @@ public final class SettingsGui {
     private static final int MAIN_PVP_TAGS_SLOT = 12;
     private static final int MAIN_COMBAT_RULES_SLOT = 14;
     private static final int MAIN_DRAGON_EGG_SLOT = 16;
+    private static final int MAIN_ENCHANTMENTS_SLOT = 22;
+    private static final int ENCHANTMENTS_PER_PAGE = 45;
     private static final int COMBAT_TAG_SLOT = 10;
     private static final int PROMPT_TIMEOUT_SLOT = 12;
     private static final int MODE_SLOT = 14;
@@ -78,6 +84,8 @@ public final class SettingsGui {
     private final BiConsumer<CombatItemAction, Double> damageModifierUpdater;
     private final Consumer<Boolean> itemCooldownBossBarUpdater;
     private final Consumer<Boolean> combatTimerBossBarUpdater;
+    private final Supplier<EnchantmentSettings> enchantmentSettings;
+    private final Consumer<EnchantmentSettings> enchantmentUpdater;
     private final Map<UUID, PendingEdit> pendingEdits = new ConcurrentHashMap<>();
 
     public SettingsGui(Plugin plugin, Supplier<JudgmentSettings> settingsSupplier,
@@ -90,7 +98,9 @@ public final class SettingsGui {
                        BiConsumer<CombatItemAction, CombatItemScope> combatItemScopeUpdater,
                        BiConsumer<CombatItemAction, Double> damageModifierUpdater,
                        Consumer<Boolean> itemCooldownBossBarUpdater,
-                       Consumer<Boolean> combatTimerBossBarUpdater) {
+                       Consumer<Boolean> combatTimerBossBarUpdater,
+                       Supplier<EnchantmentSettings> enchantmentSettings,
+                       Consumer<EnchantmentSettings> enchantmentUpdater) {
         this.plugin = plugin;
         this.settingsSupplier = settingsSupplier;
         this.combatTagUpdater = combatTagUpdater;
@@ -106,6 +116,8 @@ public final class SettingsGui {
         this.damageModifierUpdater = damageModifierUpdater;
         this.itemCooldownBossBarUpdater = itemCooldownBossBarUpdater;
         this.combatTimerBossBarUpdater = combatTimerBossBarUpdater;
+        this.enchantmentSettings = enchantmentSettings;
+        this.enchantmentUpdater = enchantmentUpdater;
     }
 
     public void open(Player admin) {
@@ -126,7 +138,71 @@ public final class SettingsGui {
         inventory.setItem(MAIN_DRAGON_EGG_SLOT, GuiItems.namedItem(Material.DRAGON_EGG,
             Component.text("Dragon Egg", NamedTextColor.LIGHT_PURPLE),
             List.of(Component.text("Dragon egg privilege and effect settings."), Component.text("Click to open."))));
+        inventory.setItem(MAIN_ENCHANTMENTS_SLOT, GuiItems.namedItem(Material.ENCHANTING_TABLE,
+            Component.text("Enchantment Rules", NamedTextColor.AQUA),
+            List.of(Component.text("Global gear enchantment bans and maximum levels."), Component.text("Click to open."))));
         admin.openInventory(inventory);
+    }
+
+    public void openEnchantments(Player admin, int requestedPage) {
+        if (!authorized(admin)) return;
+        var registry = RegistryAccess.registryAccess().getRegistry(RegistryKey.ENCHANTMENT);
+        List<NamespacedKey> all = registry.stream().map(org.bukkit.enchantments.Enchantment::getKey)
+            .sorted(java.util.Comparator.comparing(NamespacedKey::toString)).toList();
+        int pages = Math.max(1, (all.size() + ENCHANTMENTS_PER_PAGE - 1) / ENCHANTMENTS_PER_PAGE);
+        int page = Math.max(0, Math.min(requestedPage, pages - 1));
+        int start = page * ENCHANTMENTS_PER_PAGE;
+        List<NamespacedKey> entries = all.subList(start, Math.min(start + ENCHANTMENTS_PER_PAGE, all.size()));
+        EnchantmentMenuHolder holder = new EnchantmentMenuHolder(page, entries);
+        Inventory inventory = Bukkit.createInventory(holder, 54,
+            Component.text("Enchantment Rules " + (page + 1) + "/" + pages, NamedTextColor.AQUA));
+        holder.setInventory(inventory);
+        EnchantmentSettings settings = enchantmentSettings.get();
+        for (int slot = 0; slot < entries.size(); slot++) {
+            NamespacedKey key = entries.get(slot);
+            int limit = settings.limits().getOrDefault(key, 0);
+            inventory.setItem(slot, GuiItems.namedItem(Material.ENCHANTED_BOOK,
+                Component.text(enchantmentName(key) + ": " + (limit == -1 ? "BANNED" : limit == 0 ? "UNRESTRICTED" : "MAX " + limit),
+                    settingColor(limit)),
+                List.of(Component.text(key.toString(), NamedTextColor.GRAY),
+                    Component.text("Click to edit in chat."),
+                    Component.text("-1 = banned, 0 = unrestricted, 1–255 = maximum level."))));
+        }
+        inventory.setItem(45, GuiItems.namedItem(Material.REDSTONE_TORCH,
+            Component.text("Module: " + onOff(settings.enabled()), NamedTextColor.GOLD),
+            List.of(Component.text("Applies to gear, including admins and creative."),
+                Component.text("Enchanted books remain unrestricted."),
+                Component.text("Removing restrictions does not restore changed items."), Component.text("Click to toggle."))));
+        if (page > 0) inventory.setItem(48, GuiItems.namedItem(Material.ARROW,
+            Component.text("Previous Page", NamedTextColor.YELLOW), List.of()));
+        inventory.setItem(49, backItem());
+        if (page + 1 < pages) inventory.setItem(50, GuiItems.namedItem(Material.ARROW,
+            Component.text("Next Page", NamedTextColor.YELLOW), List.of()));
+        admin.openInventory(inventory);
+    }
+
+    private static String enchantmentName(NamespacedKey key) {
+        return java.util.Arrays.stream(key.getKey().replace('/', '_').split("_"))
+            .filter(word -> !word.isEmpty())
+            .map(word -> Character.toUpperCase(word.charAt(0)) + word.substring(1))
+            .collect(java.util.stream.Collectors.joining(" "));
+    }
+
+    private void handleEnchantmentClick(Player admin, int slot, EnchantmentMenuHolder holder) {
+        if (slot == 49) open(admin);
+        else if (slot == 45) {
+            enchantmentUpdater.accept(enchantmentSettings.get().withEnabled(!enchantmentSettings.get().enabled()));
+            openEnchantments(admin, holder.page());
+        } else if (slot == 48 && admin.getOpenInventory().getTopInventory().getItem(slot) != null)
+            openEnchantments(admin, holder.page() - 1);
+        else if (slot == 50 && admin.getOpenInventory().getTopInventory().getItem(slot) != null)
+            openEnchantments(admin, holder.page() + 1);
+        else {
+            NamespacedKey key = holder.enchantmentAt(slot);
+            if (key != null) beginEdit(admin,
+                new PendingEdit(PendingInput.ENCHANTMENT, null, MenuSection.ENCHANTMENTS, key, holder.page()),
+                "Set " + enchantmentName(key) + ": -1 to ban, 0 for unrestricted, 1–255 for maximum level, or cancel.");
+        }
     }
 
     public void openCombatLog(Player admin) {
@@ -263,6 +339,7 @@ public final class SettingsGui {
         else if (holder instanceof PvpTagsMenuHolder) handlePvpClick(admin, rawSlot);
         else if (holder instanceof DragonEggMenuHolder) handleDragonEggClick(admin, rawSlot);
         else if (holder instanceof CombatItemMenuHolder) handleCombatRuleClick(admin, rawSlot, clickType);
+        else if (holder instanceof EnchantmentMenuHolder enchantments) handleEnchantmentClick(admin, rawSlot, enchantments);
     }
 
     private void handleMainClick(Player admin, int slot) {
@@ -271,6 +348,7 @@ public final class SettingsGui {
             case MAIN_PVP_TAGS_SLOT -> openPvpTags(admin);
             case MAIN_COMBAT_RULES_SLOT -> openCombatItems(admin);
             case MAIN_DRAGON_EGG_SLOT -> openDragonEgg(admin);
+            case MAIN_ENCHANTMENTS_SLOT -> openEnchantments(admin, 0);
             default -> { }
         }
     }
@@ -378,12 +456,23 @@ public final class SettingsGui {
     }
 
     private void applyChatEdit(Player admin, String message, PendingEdit edit) {
+        if (!admin.isOnline() || !admin.hasPermission("judgment.admin")) return;
         if (message.equalsIgnoreCase("cancel")) {
             admin.sendMessage(Component.text("Cancelled setting change.", NamedTextColor.YELLOW));
-            reopen(admin, edit.returnMenu());
+            reopen(admin, edit);
             return;
         }
-        if (!admin.isOnline() || !admin.hasPermission("judgment.admin")) return;
+        if (edit.input() == PendingInput.ENCHANTMENT) {
+            Integer limit = parseEnchantmentLimit(message);
+            if (limit == null || edit.enchantment() == null) {
+                retry(admin, edit, "Enter -1, 0, or an integer from 1 through 255, or cancel.");
+                return;
+            }
+            enchantmentUpdater.accept(enchantmentSettings.get().with(edit.enchantment(), limit));
+            admin.sendMessage(Component.text("Updated " + enchantmentName(edit.enchantment()) + " enchantment rule.", NamedTextColor.GREEN));
+            reopen(admin, edit);
+            return;
+        }
         if (edit.input() == PendingInput.COMBAT_ITEM) {
             Double seconds = parseCombatItemSeconds(message);
             if (seconds == null || edit.action() == null) {
@@ -443,13 +532,19 @@ public final class SettingsGui {
             case COMBAT_LOG -> openCombatLog(admin);
             case PVP_TAGS -> openPvpTags(admin);
             case COMBAT_RULES -> openCombatItems(admin);
+            case ENCHANTMENTS -> openEnchantments(admin, 0);
         }
+    }
+
+    private void reopen(Player admin, PendingEdit edit) {
+        if (edit.returnMenu() == MenuSection.ENCHANTMENTS) openEnchantments(admin, edit.page());
+        else reopen(admin, edit.returnMenu());
     }
 
     public static boolean isSettingsHolder(InventoryHolder holder) {
         return holder instanceof SettingsMenuHolder || holder instanceof CombatLogMenuHolder
             || holder instanceof PvpTagsMenuHolder || holder instanceof CombatItemMenuHolder
-            || holder instanceof DragonEggMenuHolder;
+            || holder instanceof DragonEggMenuHolder || holder instanceof EnchantmentMenuHolder;
     }
 
     private boolean authorized(Player admin) {
@@ -491,6 +586,15 @@ public final class SettingsGui {
         }
     }
 
+    static Integer parseEnchantmentLimit(String raw) {
+        try {
+            int limit = Integer.parseInt(raw.trim());
+            return EnchantmentSettings.valid(limit) ? limit : null;
+        } catch (NullPointerException | NumberFormatException exception) {
+            return null;
+        }
+    }
+
     private static String formatCombatItemSetting(double seconds) {
         if (seconds == -1.0) return "BANNED";
         if (seconds == 0.0) return "NO COOLDOWN";
@@ -508,10 +612,15 @@ public final class SettingsGui {
     private static String onOff(boolean value) { return value ? "ON" : "OFF"; }
 
     private enum PendingInput {
-        COMBAT_TAG_DURATION, PROMPT_TIMEOUT_DURATION, PVP_COOLDOWN, PVP_DELAY, COMBAT_ITEM, EXPLOSIVE_DAMAGE
+        COMBAT_TAG_DURATION, PROMPT_TIMEOUT_DURATION, PVP_COOLDOWN, PVP_DELAY, COMBAT_ITEM, EXPLOSIVE_DAMAGE, ENCHANTMENT
     }
 
-    private enum MenuSection { COMBAT_LOG, PVP_TAGS, COMBAT_RULES }
+    private enum MenuSection { COMBAT_LOG, PVP_TAGS, COMBAT_RULES, ENCHANTMENTS }
 
-    private record PendingEdit(PendingInput input, CombatItemAction action, MenuSection returnMenu) {}
+    private record PendingEdit(PendingInput input, CombatItemAction action, MenuSection returnMenu,
+                               NamespacedKey enchantment, int page) {
+        private PendingEdit(PendingInput input, CombatItemAction action, MenuSection returnMenu) {
+            this(input, action, returnMenu, null, 0);
+        }
+    }
 }
