@@ -52,9 +52,13 @@ and Nether toggle locks. Duration changes affect existing waits. Enter `24h`, `1
 
 The **Combat Rules** submenu separates managed items and abilities from explosives. It
 controls elytra entry, elytra firework boosts, ender pearls, mace smashes, riptide,
-spear lunges, firework-loaded crossbows, and placement of TNT, TNT minecarts, beds,
+spear lunges, firework-loaded crossbows, harming arrows, and placement of TNT, TNT minecarts, beds,
 respawn anchors, and end crystals. Firework crossbows have a separate rule: positive
-values start their cooldown when fired, while `-1` prevents loading fireworks. Each rule accepts
+values start their cooldown when fired, while `-1` prevents loading fireworks.
+Harming I and II arrows share the `harming-arrows` rule and cooldown across bows and
+crossbows. It applies when fired, including preloaded crossbows and custom arrows with
+instant-damage effects. A Multishot volley counts as one use. Bans and cooldowns block
+harming shots without restricting ordinary arrows or fireworks. Each rule accepts
 `-1` to ban the action, `0` for unrestricted use (the default), or a positive decimal
 number of cooldown seconds. Leaving combat, dying, disconnecting, or restarting the
 server clears active PvP-only item cooldowns. Optional settings show the combat timer and
@@ -265,6 +269,7 @@ combat-item-cooldowns:
   riptide: 0
   lunge: 0
   firework-crossbows: 0
+  harming-arrows: 0
   tnt: 0
   tnt-minecarts: 0
   beds: 0
@@ -278,6 +283,7 @@ combat-item-scopes:
   riptide: pvp
   lunge: pvp
   firework-crossbows: pvp
+  harming-arrows: pvp
   tnt: pvp
   tnt-minecarts: pvp
   beds: pvp

@@ -7,6 +7,8 @@ import com.bountysmp.judgment.storage.PendingKillStore;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
@@ -52,19 +54,21 @@ class CombatBossBarControllerTest {
         assertEquals(1, count(victim.activeBossBars()));
     }
 
-    @Test void globalCooldownBarDisplaysOutsideCombat() {
+    @ParameterizedTest
+    @EnumSource(value = CombatItemAction.class, names = {"FIREWORKS", "HARMING_ARROWS"})
+    void globalCooldownBarDisplaysOutsideCombat(CombatItemAction action) {
         controller.close();
         Plugin plugin = MockBukkit.createMockPlugin();
         JudgmentSettings display = new JudgmentSettings(30_000, 10_000, PunishmentMode.RELOG,
             false, true, false);
         JudgmentService noCombat = new JudgmentService(plugin, display,
             new PendingKillStore(directory.resolve("global-pending.yml")), System::currentTimeMillis);
-        CombatItemSettings items = new CombatItemSettings(Map.of(CombatItemAction.FIREWORKS, 20.0),
-            Map.of(CombatItemAction.FIREWORKS, CombatItemScope.GLOBAL));
+        CombatItemSettings items = new CombatItemSettings(Map.of(action, 20.0),
+            Map.of(action, CombatItemScope.GLOBAL));
         CombatItemCooldownManager cooldowns = new CombatItemCooldownManager(
             new CombatItemCooldownStore(directory.resolve("global-cooldowns.yml")), () -> items,
             ignored -> false, System::currentTimeMillis, plugin.getLogger());
-        cooldowns.attempt(attacker.getUniqueId(), CombatItemAction.FIREWORKS);
+        cooldowns.attempt(attacker.getUniqueId(), action);
         controller = new CombatBossBarController(plugin, noCombat, cooldowns, () -> items, () -> display);
         controller.refresh();
         assertEquals(1, count(attacker.activeBossBars()));

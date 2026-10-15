@@ -171,12 +171,20 @@ class PvpIntegrationTest {
         click(14);
         assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof CombatItemMenuHolder);
         assertEquals(54, player.getOpenInventory().getTopInventory().getSize());
-        for (int slot : new int[] {4, 9, 11, 12, 13, 14, 15, 16, 27, 29, 30, 31, 32, 33, 49})
+        for (int slot : new int[] {4, 9, 11, 12, 13, 14, 15, 16, 22, 23, 27, 29, 30, 31, 32, 33, 49})
             assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
         click(11, ClickType.RIGHT);
         assertEquals("global", plugin.getConfig().getString("combat-item-scopes.elytra"));
         click(11, ClickType.RIGHT);
         assertEquals("pvp", plugin.getConfig().getString("combat-item-scopes.elytra"));
+        click(23);
+        chat("2.5");
+        assertEquals(2.5, plugin.getConfig().getDouble("combat-item-cooldowns.harming-arrows"));
+        click(23, ClickType.RIGHT);
+        assertEquals("global", plugin.getConfig().getString("combat-item-scopes.harming-arrows"));
+        plugin.reloadConfig();
+        assertEquals(2.5, plugin.getConfig().getDouble("combat-item-cooldowns.harming-arrows"));
+        assertEquals("global", plugin.getConfig().getString("combat-item-scopes.harming-arrows"));
         click(29, ClickType.SHIFT_LEFT);
         chat("0.5");
         assertEquals(0.5, plugin.getConfig().getDouble("combat-item-damage-modifiers.tnt"));

@@ -12,6 +12,7 @@ public enum CombatItemAction {
     RIPTIDE("riptide", "Riptide", Material.TRIDENT, false),
     LUNGE("lunge", "Lunge", Material.IRON_SPEAR, false),
     FIREWORK_CROSSBOWS("firework-crossbows", "Firework Crossbows", Material.CROSSBOW, false),
+    HARMING_ARROWS("harming-arrows", "Harming Arrows", Material.TIPPED_ARROW, false),
     TNT("tnt", "TNT", Material.TNT, true),
     TNT_MINECARTS("tnt-minecarts", "TNT Minecarts", Material.TNT_MINECART, true),
     BEDS("beds", "Beds", Material.RED_BED, true),

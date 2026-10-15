@@ -24,6 +24,11 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.block.Action;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.inventory.meta.CrossbowMeta;
+import org.bukkit.potion.PotionType;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.*;
@@ -37,6 +42,8 @@ import java.nio.file.Path;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -49,6 +56,8 @@ class CombatItemListenerTest {
     NativeWeaponCooldownController nativeCooldowns;
     CombatItemCooldownManager manager;
     AtomicReference<CombatItemSettings> settings;
+    AtomicLong now = new AtomicLong(1_000L);
+    AtomicBoolean inCombat = new AtomicBoolean(true);
 
     @BeforeEach void setup() {
         server = MockBukkit.mock();
@@ -60,7 +69,7 @@ class CombatItemListenerTest {
         settings = new AtomicReference<>(new CombatItemSettings(values));
         manager = new CombatItemCooldownManager(
             new CombatItemCooldownStore(directory.resolve("cooldowns.yml")), settings::get,
-            ignored -> true, System::currentTimeMillis, plugin.getLogger());
+            ignored -> inCombat.get(), now::get, plugin.getLogger());
         nativeCooldowns = new NativeWeaponCooldownController(plugin, manager);
         listener = new CombatItemListener(plugin, manager, nativeCooldowns);
         server.getPluginManager().registerEvents(listener, plugin);
@@ -201,6 +210,135 @@ class CombatItemListenerTest {
             EquipmentSlot.HAND, 1.0f, true);
         server.getPluginManager().callEvent(arrowShot);
         assertEquals(0, player.getCooldown(crossbow));
+    }
+
+    @Test void bansBothHarmingLevelsFromBowsAndPreloadedCrossbows() {
+        for (Material type : new Material[] {Material.BOW, Material.CROSSBOW}) {
+            for (PotionType potion : new PotionType[] {PotionType.HARMING, PotionType.STRONG_HARMING}) {
+                ItemStack weapon = new ItemStack(type);
+                ItemStack ammo = tippedArrow(potion);
+                if (type == Material.CROSSBOW) {
+                    CrossbowMeta meta = (CrossbowMeta) weapon.getItemMeta();
+                    meta.addChargedProjectile(ammo);
+                    weapon.setItemMeta(meta);
+                }
+                assertTrue(fire(weapon, ammo).isCancelled());
+            }
+        }
+        assertTrue(manager.snapshot().isEmpty());
+    }
+
+    @Test void detectsCustomDamageAndProjectilePotionFallback() {
+        ItemStack custom = tippedArrow(PotionType.WATER);
+        PotionMeta meta = (PotionMeta) custom.getItemMeta();
+        meta.addCustomEffect(new PotionEffect(PotionEffectType.INSTANT_DAMAGE, 1, 1), true);
+        custom.setItemMeta(meta);
+        assertTrue(fire(new ItemStack(Material.BOW), custom).isCancelled());
+
+        Arrow arrow = world.spawn(world.getSpawnLocation(), Arrow.class);
+        arrow.setBasePotionType(PotionType.STRONG_HARMING);
+        EntityShootBowEvent fallback = shot(player, new ItemStack(Material.CROSSBOW), null, arrow);
+        server.getPluginManager().callEvent(fallback);
+        assertTrue(fallback.isCancelled());
+
+        // ArrowMock does not implement custom effects; supply the public API response directly.
+        Arrow customArrow = new org.mockbukkit.mockbukkit.entity.ArrowMock(server, java.util.UUID.randomUUID()) {
+            @Override public java.util.List<PotionEffect> getCustomEffects() {
+                return java.util.List.of(new PotionEffect(PotionEffectType.INSTANT_DAMAGE, 1, 0));
+            }
+        };
+        EntityShootBowEvent customFallback = shot(player, new ItemStack(Material.BOW), null, customArrow);
+        server.getPluginManager().callEvent(customFallback);
+        assertTrue(customFallback.isCancelled());
+    }
+
+    @Test void sharesCooldownAcrossLevelsAndWeaponsWithoutBlockingOtherAmmo() {
+        settings.set(CombatItemSettings.defaults().with(CombatItemAction.HARMING_ARROWS, 2.5));
+        assertFalse(fire(new ItemStack(Material.BOW), tippedArrow(PotionType.HARMING)).isCancelled());
+        assertTrue(fire(new ItemStack(Material.CROSSBOW), tippedArrow(PotionType.STRONG_HARMING)).isCancelled());
+        assertFalse(fire(new ItemStack(Material.BOW), new ItemStack(Material.ARROW)).isCancelled());
+        assertFalse(fire(new ItemStack(Material.CROSSBOW), tippedArrow(PotionType.POISON)).isCancelled());
+        EntityShootBowEvent rocket = shot(player, new ItemStack(Material.CROSSBOW),
+            new ItemStack(Material.FIREWORK_ROCKET), world.spawn(world.getSpawnLocation(), Firework.class));
+        server.getPluginManager().callEvent(rocket);
+        assertFalse(rocket.isCancelled());
+        assertEquals(0, player.getCooldown(Material.BOW));
+        assertEquals(0, player.getCooldown(Material.CROSSBOW));
+        now.addAndGet(2_500);
+        assertFalse(fire(new ItemStack(Material.CROSSBOW), tippedArrow(PotionType.STRONG_HARMING)).isCancelled());
+    }
+
+    @Test void respectsUnrestrictedAndCombatScopes() {
+        settings.set(CombatItemSettings.defaults());
+        for (int i = 0; i < 2; i++)
+            assertFalse(fire(new ItemStack(Material.BOW), tippedArrow(PotionType.HARMING)).isCancelled());
+        assertTrue(manager.snapshot().isEmpty());
+        settings.set(settings.get().with(CombatItemAction.HARMING_ARROWS, -1));
+        inCombat.set(false);
+        assertFalse(fire(new ItemStack(Material.BOW), tippedArrow(PotionType.HARMING)).isCancelled());
+        settings.set(settings.get().withScope(CombatItemAction.HARMING_ARROWS, CombatItemScope.GLOBAL));
+        assertTrue(fire(new ItemStack(Material.BOW), tippedArrow(PotionType.HARMING)).isCancelled());
+        settings.set(settings.get().with(CombatItemAction.HARMING_ARROWS, 2));
+        assertFalse(fire(new ItemStack(Material.BOW), tippedArrow(PotionType.HARMING)).isCancelled());
+        assertTrue(fire(new ItemStack(Material.BOW), tippedArrow(PotionType.STRONG_HARMING)).isCancelled());
+    }
+
+    @Test void multishotEvaluatesOncePerVolleyAndBlocksAllSubsequentProjectiles() {
+        settings.set(CombatItemSettings.defaults().with(CombatItemAction.HARMING_ARROWS, 10));
+        ItemStack crossbow = new ItemStack(Material.CROSSBOW);
+        crossbow.addUnsafeEnchantment(Enchantment.MULTISHOT, 1);
+        for (int i = 0; i < 3; i++)
+            assertFalse(fire(crossbow, tippedArrow(PotionType.HARMING)).isCancelled());
+        for (int i = 0; i < 3; i++)
+            assertTrue(fire(crossbow, tippedArrow(PotionType.STRONG_HARMING)).isCancelled());
+        server.getScheduler().performOneTick();
+        now.addAndGet(10_000);
+        for (int i = 0; i < 3; i++)
+            assertFalse(fire(crossbow, tippedArrow(PotionType.STRONG_HARMING)).isCancelled());
+    }
+
+    @Test void multishotBanAndIncompleteVolleyDoNotAllowLaterShots() {
+        ItemStack crossbow = new ItemStack(Material.CROSSBOW);
+        crossbow.addUnsafeEnchantment(Enchantment.MULTISHOT, 1);
+        for (int i = 0; i < 3; i++)
+            assertTrue(fire(crossbow, tippedArrow(PotionType.HARMING)).isCancelled());
+        settings.set(CombatItemSettings.defaults().with(CombatItemAction.HARMING_ARROWS, 10));
+        assertFalse(fire(crossbow, tippedArrow(PotionType.HARMING)).isCancelled());
+        server.getScheduler().performOneTick();
+        assertTrue(fire(crossbow, tippedArrow(PotionType.HARMING)).isCancelled());
+    }
+
+    @Test void ignoresNonPlayersAndAlreadyCancelledHarmingShots() {
+        settings.set(CombatItemSettings.defaults().with(CombatItemAction.HARMING_ARROWS, 10));
+        EntityShootBowEvent cancelled = shot(player, new ItemStack(Material.BOW),
+            tippedArrow(PotionType.HARMING), world.spawn(world.getSpawnLocation(), Arrow.class));
+        cancelled.setCancelled(true);
+        server.getPluginManager().callEvent(cancelled);
+        assertTrue(manager.snapshot().isEmpty());
+        EntityShootBowEvent mob = shot(world.spawn(world.getSpawnLocation(), Skeleton.class),
+            new ItemStack(Material.BOW), tippedArrow(PotionType.HARMING),
+            world.spawn(world.getSpawnLocation(), Arrow.class));
+        server.getPluginManager().callEvent(mob);
+        assertFalse(mob.isCancelled());
+        assertTrue(manager.snapshot().isEmpty());
+    }
+
+    private ItemStack tippedArrow(PotionType type) {
+        ItemStack arrow = new ItemStack(Material.TIPPED_ARROW);
+        PotionMeta meta = (PotionMeta) arrow.getItemMeta();
+        meta.setBasePotionType(type);
+        arrow.setItemMeta(meta);
+        return arrow;
+    }
+
+    private EntityShootBowEvent fire(ItemStack weapon, ItemStack ammo) {
+        EntityShootBowEvent event = shot(player, weapon, ammo, world.spawn(world.getSpawnLocation(), Arrow.class));
+        server.getPluginManager().callEvent(event);
+        return event;
+    }
+
+    private EntityShootBowEvent shot(LivingEntity shooter, ItemStack weapon, ItemStack ammo, Entity projectile) {
+        return new EntityShootBowEvent(shooter, weapon, ammo, projectile, EquipmentSlot.HAND, 1.0f, true);
     }
 
     @Test void blocksConfiguredPlacementsButNotUnrelatedBlocks() {

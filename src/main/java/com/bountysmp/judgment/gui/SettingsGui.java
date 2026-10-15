@@ -60,9 +60,9 @@ public final class SettingsGui {
     private static final CombatItemAction[] MANAGED_ACTIONS = {
         CombatItemAction.ELYTRA, CombatItemAction.FIREWORKS, CombatItemAction.ENDER_PEARLS,
         CombatItemAction.MACE_SMASH, CombatItemAction.RIPTIDE, CombatItemAction.LUNGE,
-        CombatItemAction.FIREWORK_CROSSBOWS
+        CombatItemAction.FIREWORK_CROSSBOWS, CombatItemAction.HARMING_ARROWS
     };
-    private static final int[] MANAGED_SLOTS = {11, 12, 13, 14, 15, 16, 22};
+    private static final int[] MANAGED_SLOTS = {11, 12, 13, 14, 15, 16, 22, 23};
     private static final CombatItemAction[] EXPLOSIVE_ACTIONS = {
         CombatItemAction.TNT, CombatItemAction.TNT_MINECARTS, CombatItemAction.BEDS,
         CombatItemAction.RESPAWN_ANCHORS, CombatItemAction.END_CRYSTALS
@@ -320,6 +320,13 @@ public final class SettingsGui {
     }
 
     private static ItemStack combatRuleIcon(CombatItemAction action) {
+        if (action == CombatItemAction.HARMING_ARROWS) {
+            ItemStack arrow = new ItemStack(Material.TIPPED_ARROW);
+            org.bukkit.inventory.meta.PotionMeta meta = (org.bukkit.inventory.meta.PotionMeta) arrow.getItemMeta();
+            meta.setBasePotionType(org.bukkit.potion.PotionType.HARMING);
+            arrow.setItemMeta(meta);
+            return arrow;
+        }
         if (action != CombatItemAction.FIREWORK_CROSSBOWS) return new ItemStack(action.icon());
         ItemStack crossbow = new ItemStack(Material.CROSSBOW);
         CrossbowMeta meta = (CrossbowMeta) crossbow.getItemMeta();

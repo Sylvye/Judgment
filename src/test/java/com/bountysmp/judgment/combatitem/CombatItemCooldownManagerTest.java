@@ -102,6 +102,16 @@ class CombatItemCooldownManagerTest {
         assertFalse(reloaded.snapshot().isEmpty());
     }
 
+    @Test void harmingArrowCooldownSurvivesReloadAndExpires() {
+        settings.set(settings.get().with(CombatItemAction.HARMING_ARROWS, 10));
+        assertTrue(manager(true).attempt(player, CombatItemAction.HARMING_ARROWS).allowed());
+        now.addAndGet(4_000);
+        CombatItemCooldownManager reloaded = manager(true);
+        assertEquals(6_000, reloaded.attempt(player, CombatItemAction.HARMING_ARROWS).remainingMillis());
+        now.addAndGet(6_000);
+        assertTrue(reloaded.attempt(player, CombatItemAction.HARMING_ARROWS).allowed());
+    }
+
     @Test void changingScopeClearsExistingTimers() {
         settings.set(new CombatItemSettings(Map.of(CombatItemAction.ELYTRA, 10.0),
             Map.of(CombatItemAction.ELYTRA, CombatItemScope.GLOBAL)));

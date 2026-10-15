@@ -8,6 +8,13 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.damage.DamageType;
 import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.entity.Arrow;
+import org.bukkit.inventory.meta.CrossbowMeta;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.potion.PotionType;
 import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -47,6 +54,7 @@ public final class CombatItemListener implements Listener {
     private final CombatItemCooldownManager cooldowns;
     private final NativeWeaponCooldownController nativeCooldowns;
     private final Plugin plugin;
+    private final Map<VolleyKey, HarmingVolley> harmingVolleys = new HashMap<>();
     private final Map<NoticeKey, Long> lastNotices = new HashMap<>();
     private final Map<BlockPosition, CombatItemAction> imminentBlockExplosions = new HashMap<>();
 
@@ -161,6 +169,80 @@ public final class CombatItemListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onHarmingArrowShot(EntityShootBowEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        ItemStack weapon = event.getBow();
+        if (weapon == null || (weapon.getType() != Material.BOW && weapon.getType() != Material.CROSSBOW)
+            || !isHarmingArrow(event)) return;
+
+        CombatItemAction action = CombatItemAction.HARMING_ARROWS;
+        VolleyKey key = new VolleyKey(player.getUniqueId(), event.getHand());
+        int tick = org.bukkit.Bukkit.getCurrentTick();
+        HarmingVolley volley = harmingVolleys.get(key);
+        CombatItemCooldownManager.Result result;
+        if (weapon.getType() == Material.CROSSBOW && volley != null && volley.tick == tick
+            && volley.remaining > 0) {
+            result = volley.result;
+            if (--volley.remaining == 0) harmingVolleys.remove(key);
+        } else {
+            result = cooldowns.attempt(player.getUniqueId(), action);
+            int projectiles = crossbowProjectileCount(weapon);
+            if (projectiles > 1) {
+                // Paper fires one event per projectile synchronously within a crossbow volley.
+                HarmingVolley started = new HarmingVolley(tick, projectiles - 1, result);
+                harmingVolleys.put(key, started);
+                org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> harmingVolleys.remove(key, started));
+            }
+        }
+        if (!result.allowed()) {
+            event.setCancelled(true);
+            showDenied(player, action, result);
+        }
+    }
+
+    private static boolean isHarmingArrow(EntityShootBowEvent event) {
+        if (!(event.getProjectile() instanceof Arrow arrow)) return false;
+        ItemStack consumable = event.getConsumable();
+        if (consumable != null && !consumable.getType().isAir()) {
+            return consumable.getType() == Material.TIPPED_ARROW
+                && consumable.getItemMeta() instanceof PotionMeta meta
+                && (harming(meta.getBasePotionType()) || hasInstantDamage(meta.getCustomEffects()));
+        }
+        return harming(arrow.getBasePotionType()) || hasInstantDamage(arrow.getCustomEffects());
+    }
+
+    private static boolean harming(PotionType type) {
+        return type == PotionType.HARMING || type == PotionType.STRONG_HARMING;
+    }
+
+    private static boolean hasInstantDamage(Iterable<PotionEffect> effects) {
+        for (PotionEffect effect : effects)
+            if (effect.getType().equals(PotionEffectType.INSTANT_DAMAGE)) return true;
+        return false;
+    }
+
+    private static int crossbowProjectileCount(ItemStack weapon) {
+        if (weapon.getType() != Material.CROSSBOW) return 1;
+        CrossbowMeta meta = (CrossbowMeta) weapon.getItemMeta();
+        return Math.max(meta.getChargedProjectiles().size(),
+            weapon.containsEnchantment(Enchantment.MULTISHOT) ? 3 : 1);
+    }
+
+    private record VolleyKey(UUID player, EquipmentSlot hand) {}
+
+    private static final class HarmingVolley {
+        private final int tick;
+        private int remaining;
+        private final CombatItemCooldownManager.Result result;
+
+        private HarmingVolley(int tick, int remaining, CombatItemCooldownManager.Result result) {
+            this.tick = tick;
+            this.remaining = remaining;
+            this.result = result;
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onEntityPlace(EntityPlaceEvent event) {
         Player player = event.getPlayer();
         if (player == null) return;
@@ -206,6 +288,7 @@ public final class CombatItemListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         cooldowns.clearPvpCooldowns(event.getPlayer().getUniqueId());
+        harmingVolleys.keySet().removeIf(key -> key.player().equals(event.getPlayer().getUniqueId()));
     }
 
     private static void stopRiptide(Player player, Vector priorVelocity) {

@@ -24,6 +24,18 @@ class CombatItemSettingsTest {
         assertEquals(2.75, settings.seconds(CombatItemAction.ENDER_PEARLS));
     }
 
+    @Test void harmingArrowsDefaultSafelyAndLoadTheSharedRule() {
+        YamlConfiguration config = new YamlConfiguration();
+        CombatItemSettings defaults = CombatItemSettings.fromConfig(config, Logger.getLogger("test"));
+        assertEquals(0.0, defaults.seconds(CombatItemAction.HARMING_ARROWS));
+        assertEquals(CombatItemScope.PVP_ONLY, defaults.scope(CombatItemAction.HARMING_ARROWS));
+        config.set("combat-item-cooldowns.harming-arrows", 2.5);
+        config.set("combat-item-scopes.harming-arrows", "global");
+        CombatItemSettings loaded = CombatItemSettings.fromConfig(config, Logger.getLogger("test"));
+        assertEquals(2.5, loaded.seconds(CombatItemAction.HARMING_ARROWS));
+        assertEquals(CombatItemScope.GLOBAL, loaded.scope(CombatItemAction.HARMING_ARROWS));
+    }
+
     @Test void invalidValuesFallBackToZero() {
         YamlConfiguration config = new YamlConfiguration();
         config.set("combat-item-cooldowns.riptide", -2);
