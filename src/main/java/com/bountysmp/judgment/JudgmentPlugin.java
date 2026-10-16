@@ -1,5 +1,6 @@
 package com.bountysmp.judgment;
 
+import com.bountysmp.judgment.damage.DamageAttribution;
 import com.bountysmp.judgment.command.JudgmentCommand;
 import com.bountysmp.judgment.combatitem.*;
 import com.bountysmp.judgment.enchantment.EnchantmentSettings;
@@ -33,6 +34,7 @@ public class JudgmentPlugin extends JavaPlugin {
     private CombatItemCooldownManager combatItemCooldownManager;
     private CombatBossBarController combatBossBarController;
     private NativeWeaponCooldownController nativeWeaponCooldownController;
+    private FlightLandingRequirement flightLandingRequirement;
     private EnchantmentSettings enchantmentSettings;
     private EnchantmentController enchantmentController;
 
@@ -79,7 +81,7 @@ public class JudgmentPlugin extends JavaPlugin {
             () -> pvpSettings, this::setPvpSettings, () -> dragonEggSettings, this::setDragonEggSettings,
             () -> combatItemSettings, this::setCombatItemSetting, this::setCombatItemScope,
             this::setCombatItemDamageModifier,
-            this::setItemCooldownBossBars, this::setCombatTimerBossBar,
+            this::setRequireLanding, this::setItemCooldownBossBars, this::setCombatTimerBossBar,
             () -> enchantmentSettings, this::setEnchantmentSettings);
         enchantmentController = new EnchantmentController(this, () -> enchantmentSettings);
         getServer().getPluginManager().registerEvents(enchantmentController, this);
@@ -95,11 +97,16 @@ public class JudgmentPlugin extends JavaPlugin {
         PluginCommand pvp = Objects.requireNonNull(getCommand("pvp"), "pvp command missing from plugin.yml");
         pvp.setExecutor(pvpCommand);
         pvp.setTabCompleter(pvpCommand);
-        getServer().getPluginManager().registerEvents(new PvpListener(this, pvpService, judgmentService, pvpPresentation), this);
+        DamageAttribution attribution = new DamageAttribution(this);
+        getServer().getPluginManager().registerEvents(new PvpListener(this, pvpService, judgmentService, pvpPresentation, attribution), this);
+        flightLandingRequirement = new FlightLandingRequirement(this, () -> combatItemSettings, attribution,
+            judgmentService::isExecutingPunishment, new FlightLandingStore(getDataFolder().toPath().resolve("flight-landing.yml")));
+        getServer().getPluginManager().registerEvents(flightLandingRequirement, this);
         nativeWeaponCooldownController = new NativeWeaponCooldownController(this, combatItemCooldownManager);
         getServer().getPluginManager().registerEvents(nativeWeaponCooldownController, this);
         getServer().getPluginManager().registerEvents(
-            new CombatItemListener(this, combatItemCooldownManager, nativeWeaponCooldownController), this);
+            new CombatItemListener(this, combatItemCooldownManager, nativeWeaponCooldownController, attribution,
+                judgmentService::isExecutingPunishment), this);
         combatBossBarController = new CombatBossBarController(this, judgmentService, combatItemCooldownManager,
             () -> combatItemSettings, () -> settings);
         pvpPresentation.refreshAll();
@@ -121,6 +128,7 @@ public class JudgmentPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (flightLandingRequirement != null) flightLandingRequirement.close();
         if (enchantmentController != null) enchantmentController.close();
         if (nativeWeaponCooldownController != null) nativeWeaponCooldownController.close();
         if (combatBossBarController != null) combatBossBarController.close();
@@ -207,6 +215,7 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set(CombatItemSettings.CONFIG_ROOT + "." + action.configKey(), seconds);
         saveConfig();
         combatItemCooldownManager.settingChanged(action, seconds);
+        flightLandingRequirement.settingsChanged();
         nativeWeaponCooldownController.resynchronize(action);
     }
 
@@ -222,6 +231,13 @@ public class JudgmentPlugin extends JavaPlugin {
         combatItemSettings = combatItemSettings.withDamageModifier(action, modifier);
         getConfig().set(CombatItemSettings.DAMAGE_MODIFIER_CONFIG_ROOT + "." + action.configKey(), modifier);
         saveConfig();
+    }
+
+    private void setRequireLanding(boolean enabled) {
+        combatItemSettings = combatItemSettings.withRequireLanding(enabled);
+        getConfig().set(CombatItemSettings.REQUIRE_LANDING_CONFIG, enabled);
+        saveConfig();
+        flightLandingRequirement.settingsChanged();
     }
 
     private void setItemCooldownBossBars(boolean enabled) {

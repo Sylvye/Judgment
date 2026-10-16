@@ -82,6 +82,7 @@ public final class SettingsGui {
     private final BiConsumer<CombatItemAction, Double> combatItemUpdater;
     private final BiConsumer<CombatItemAction, CombatItemScope> combatItemScopeUpdater;
     private final BiConsumer<CombatItemAction, Double> damageModifierUpdater;
+    private final Consumer<Boolean> requireLandingUpdater;
     private final Consumer<Boolean> itemCooldownBossBarUpdater;
     private final Consumer<Boolean> combatTimerBossBarUpdater;
     private final Supplier<EnchantmentSettings> enchantmentSettings;
@@ -97,6 +98,7 @@ public final class SettingsGui {
                        BiConsumer<CombatItemAction, Double> combatItemUpdater,
                        BiConsumer<CombatItemAction, CombatItemScope> combatItemScopeUpdater,
                        BiConsumer<CombatItemAction, Double> damageModifierUpdater,
+                       Consumer<Boolean> requireLandingUpdater,
                        Consumer<Boolean> itemCooldownBossBarUpdater,
                        Consumer<Boolean> combatTimerBossBarUpdater,
                        Supplier<EnchantmentSettings> enchantmentSettings,
@@ -114,6 +116,7 @@ public final class SettingsGui {
         this.combatItemUpdater = combatItemUpdater;
         this.combatItemScopeUpdater = combatItemScopeUpdater;
         this.damageModifierUpdater = damageModifierUpdater;
+        this.requireLandingUpdater = requireLandingUpdater;
         this.itemCooldownBossBarUpdater = itemCooldownBossBarUpdater;
         this.combatTimerBossBarUpdater = combatTimerBossBarUpdater;
         this.enchantmentSettings = enchantmentSettings;
@@ -292,6 +295,11 @@ public final class SettingsGui {
         inventory.setItem(COMBAT_RULE_BOSS_BAR_SLOT, GuiItems.namedItem(Material.EXPERIENCE_BOTTLE,
             Component.text("Cooldown Boss Bars: " + onOff(settingsSupplier.get().itemCooldownBossBars()), NamedTextColor.AQUA),
             List.of(Component.text("Show a decreasing bar for every active item cooldown."), Component.text("Click to toggle."))));
+        inventory.setItem(5, GuiItems.namedItem(Material.FEATHER,
+            Component.text("Require Landing After Banned Flight: " + onOff(combatItemSettings.get().requireLanding()), NamedTextColor.AQUA),
+            List.of(Component.text("Elytra banned: land after gliding."),
+                Component.text("Only rockets banned: land after boosting."),
+                Component.text("Neither banned: no landing requirement."), Component.text("Click to toggle."))));
         inventory.setItem(9, GuiItems.namedItem(Material.WRITABLE_BOOK,
             Component.text("Managed Items & Abilities", NamedTextColor.AQUA), List.of(Component.text("Cooldown, ban, and scope controls."))));
         inventory.setItem(27, GuiItems.namedItem(Material.TNT,
@@ -426,6 +434,11 @@ public final class SettingsGui {
     }
 
     private void handleCombatRuleClick(Player admin, int slot, ClickType clickType) {
+        if (slot == 5) {
+            requireLandingUpdater.accept(!combatItemSettings.get().requireLanding());
+            openCombatItems(admin);
+            return;
+        }
         if (slot == COMBAT_RULE_BOSS_BAR_SLOT) {
             itemCooldownBossBarUpdater.accept(!settingsSupplier.get().itemCooldownBossBars());
             openCombatItems(admin);

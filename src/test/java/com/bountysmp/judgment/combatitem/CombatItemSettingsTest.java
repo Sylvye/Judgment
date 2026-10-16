@@ -36,6 +36,22 @@ class CombatItemSettingsTest {
         assertEquals(CombatItemScope.GLOBAL, loaded.scope(CombatItemAction.HARMING_ARROWS));
     }
 
+    @Test void landingToggleDefaultsOffAndSurvivesRuleUpdates() {
+        YamlConfiguration config = new YamlConfiguration();
+        assertFalse(CombatItemSettings.fromConfig(config, Logger.getLogger("test")).requireLanding());
+        config.set("combat-item-require-landing", true);
+        CombatItemSettings settings = CombatItemSettings.fromConfig(config, Logger.getLogger("test"))
+            .with(CombatItemAction.ELYTRA, -1)
+            .withScope(CombatItemAction.FIREWORKS, CombatItemScope.GLOBAL)
+            .withDamageModifier(CombatItemAction.TNT, 0.5);
+        assertTrue(settings.requireLanding());
+        settings = settings.withRequireLanding(false);
+        assertFalse(settings.requireLanding());
+        assertEquals(-1.0, settings.seconds(CombatItemAction.ELYTRA));
+        assertEquals(CombatItemScope.GLOBAL, settings.scope(CombatItemAction.FIREWORKS));
+        assertEquals(0.5, settings.damageModifier(CombatItemAction.TNT));
+    }
+
     @Test void invalidValuesFallBackToZero() {
         YamlConfiguration config = new YamlConfiguration();
         config.set("combat-item-cooldowns.riptide", -2);

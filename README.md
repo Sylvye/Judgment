@@ -69,6 +69,19 @@ timer on combat exit. `GLOBAL` applies everywhere and persists its timer through
 reconnects and restarts. In the item grid, left-click edits the cooldown and right-click
 toggles the scope.
 
+Banned explosives cannot damage other players when credited to a player, including the
+opening hit before combat tagging. This covers TNT, TNT minecarts, crystals, beds, and
+respawn anchors. Placement rules and scopes still apply as above.
+
+The **Require Landing After Banned Flight** toggle (`combat-item-require-landing`, default
+`false`) blocks damage to opponents until landing after using banned flight equipment.
+If elytra is banned, any successful elytra flight triggers it; if only rockets are banned,
+only elytra rocket boosts trigger it. Neither banned means no landing requirement.
+It covers melee, mace, projectiles, explosives, and harmful potions. Stopping glide or
+entering water does not clear it. Ground contact or death clears it; reconnects and
+restarts preserve it in `plugins/Judgment/flight-landing.yml`. Removing the relevant ban
+or disabling the toggle clears pending restrictions. Blocked attacks do not start combat.
+
 Every explosive also has a global player-damage multiplier. Shift-left-click its GUI
 item to edit it: `0` removes player health damage, `0.5` halves it, `1` keeps vanilla
 damage, and values above `1` amplify it. Mob damage, explosion knockback, and block
@@ -261,6 +274,7 @@ prompt-timeout-seconds: 10
 bossbars:
   item-cooldowns: false
   combat-timer: false
+combat-item-require-landing: false
 combat-item-cooldowns:
   elytra: 0
   fireworks: 0

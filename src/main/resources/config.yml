@@ -24,6 +24,11 @@ bossbars:
   # Show the remaining active combat-tag time.
   combat-timer: false
 
+# Require landing before PvP after flight using banned elytra, or boosts using banned rockets.
+# Does nothing when neither is banned. Pending restrictions survive reconnects/restarts.
+combat-item-require-landing: false
+
+# Banned explosives also cannot damage other players, including the opening PvP hit.
 # Combat-only item/action rules: -1 bans, 0 disables the cooldown, positive values are seconds.
 combat-item-cooldowns:
   elytra: 0

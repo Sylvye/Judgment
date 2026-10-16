@@ -10,7 +10,9 @@ public final class CombatItemSettings {
     public static final String CONFIG_ROOT = "combat-item-cooldowns";
     public static final String SCOPE_CONFIG_ROOT = "combat-item-scopes";
     public static final String DAMAGE_MODIFIER_CONFIG_ROOT = "combat-item-damage-modifiers";
+    public static final String REQUIRE_LANDING_CONFIG = "combat-item-require-landing";
     private final Map<CombatItemAction, CombatItemRule> rules;
+    private final boolean requireLanding;
 
     public CombatItemSettings(Map<CombatItemAction, Double> seconds) {
         this(seconds, Map.of());
@@ -24,6 +26,13 @@ public final class CombatItemSettings {
     public CombatItemSettings(Map<CombatItemAction, Double> seconds,
                               Map<CombatItemAction, CombatItemScope> scopes,
                               Map<CombatItemAction, Double> damageModifiers) {
+        this(seconds, scopes, damageModifiers, false);
+    }
+
+    public CombatItemSettings(Map<CombatItemAction, Double> seconds,
+                              Map<CombatItemAction, CombatItemScope> scopes,
+                              Map<CombatItemAction, Double> damageModifiers, boolean requireLanding) {
+        this.requireLanding = requireLanding;
         EnumMap<CombatItemAction, CombatItemRule> copy = new EnumMap<>(CombatItemAction.class);
         for (CombatItemAction action : CombatItemAction.values())
             copy.put(action, new CombatItemRule(seconds.getOrDefault(action, 0.0),
@@ -67,7 +76,13 @@ public final class CombatItemSettings {
             }
             damageModifiers.put(action, damageModifier);
         }
-        return new CombatItemSettings(values, scopes, damageModifiers);
+        return new CombatItemSettings(values, scopes, damageModifiers, config.getBoolean(REQUIRE_LANDING_CONFIG, false));
+    }
+
+    public boolean requireLanding() { return requireLanding; }
+
+    public CombatItemSettings withRequireLanding(boolean enabled) {
+        return copyRules(null, null, enabled);
     }
 
     public CombatItemRule rule(CombatItemAction action) { return rules.get(action); }
@@ -91,6 +106,10 @@ public final class CombatItemSettings {
     }
 
     private CombatItemSettings withRule(CombatItemAction changed, CombatItemRule rule) {
+        return copyRules(changed, rule, requireLanding);
+    }
+
+    private CombatItemSettings copyRules(CombatItemAction changed, CombatItemRule rule, boolean landing) {
         EnumMap<CombatItemAction, Double> values = new EnumMap<>(CombatItemAction.class);
         EnumMap<CombatItemAction, CombatItemScope> scopes = new EnumMap<>(CombatItemAction.class);
         EnumMap<CombatItemAction, Double> damageModifiers = new EnumMap<>(CombatItemAction.class);
@@ -100,7 +119,7 @@ public final class CombatItemSettings {
             scopes.put(action, selected.scope());
             damageModifiers.put(action, selected.damageModifier());
         }
-        return new CombatItemSettings(values, scopes, damageModifiers);
+        return new CombatItemSettings(values, scopes, damageModifiers, landing);
     }
 
     public static boolean valid(double value) {

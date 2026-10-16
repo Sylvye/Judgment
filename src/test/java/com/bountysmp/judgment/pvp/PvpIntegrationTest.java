@@ -171,8 +171,15 @@ class PvpIntegrationTest {
         click(14);
         assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof CombatItemMenuHolder);
         assertEquals(54, player.getOpenInventory().getTopInventory().getSize());
-        for (int slot : new int[] {4, 9, 11, 12, 13, 14, 15, 16, 22, 23, 27, 29, 30, 31, 32, 33, 49})
+        for (int slot : new int[] {4, 5, 9, 11, 12, 13, 14, 15, 16, 22, 23, 27, 29, 30, 31, 32, 33, 49})
             assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
+        assertFalse(plugin.getConfig().getBoolean("combat-item-require-landing"));
+        click(5);
+        assertTrue(plugin.getConfig().getBoolean("combat-item-require-landing"));
+        plugin.reloadConfig();
+        assertTrue(plugin.getConfig().getBoolean("combat-item-require-landing"));
+        click(5);
+        assertFalse(plugin.getConfig().getBoolean("combat-item-require-landing"));
         click(11, ClickType.RIGHT);
         assertEquals("global", plugin.getConfig().getString("combat-item-scopes.elytra"));
         click(11, ClickType.RIGHT);

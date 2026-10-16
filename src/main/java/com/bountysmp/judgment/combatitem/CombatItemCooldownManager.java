@@ -118,6 +118,8 @@ public final class CombatItemCooldownManager {
     public CombatItemScope scope(CombatItemAction action) { return settings.get().scope(action); }
     public double damageModifier(CombatItemAction action) { return settings.get().damageModifier(action); }
 
+    public boolean isConfiguredBanned(CombatItemAction action) { return settings.get().seconds(action) == -1.0; }
+
     public boolean isBanned(UUID playerId, CombatItemAction action) {
         return applies(playerId, action) && settings.get().seconds(action) == -1.0;
     }
