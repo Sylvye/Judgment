@@ -1,6 +1,7 @@
 package com.bountysmp.judgment;
 
 import com.bountysmp.judgment.damage.DamageAttribution;
+import com.bountysmp.judgment.migration.LegacyEggEffectCleanup;
 import com.bountysmp.judgment.command.JudgmentCommand;
 import com.bountysmp.judgment.combatitem.*;
 import com.bountysmp.judgment.enchantment.EnchantmentSettings;
@@ -28,8 +29,6 @@ public class JudgmentPlugin extends JavaPlugin {
     private PvpSettings pvpSettings;
     private PvpService pvpService;
     private PvpPresentation pvpPresentation;
-    private DragonEggSettings dragonEggSettings;
-    private DragonEggPrivilege dragonEggPrivilege;
     private CombatItemSettings combatItemSettings;
     private CombatItemCooldownManager combatItemCooldownManager;
     private CombatBossBarController combatBossBarController;
@@ -54,16 +53,12 @@ public class JudgmentPlugin extends JavaPlugin {
 
         judgmentService = new JudgmentService(this, settings, pendingKillStore, System::currentTimeMillis);
         pvpSettings = PvpSettings.fromConfig(getConfig(), getLogger());
-        dragonEggSettings = DragonEggSettings.fromConfig(getConfig(), getLogger());
         combatItemSettings = CombatItemSettings.fromConfig(getConfig(), getLogger());
         enchantmentSettings = EnchantmentSettings.fromConfig(getConfig(), getLogger());
         pvpService = new PvpService(new PvpStore(getDataFolder().toPath().resolve("pvp-players.yml")),
             () -> pvpSettings, System::currentTimeMillis,
             id -> judgmentService.getCombatTag(id).isPresent(),
-            id -> {
-                org.bukkit.entity.Player player = getServer().getPlayer(id);
-                return player != null && dragonEggPrivilegeHasEgg(player);
-            }, id -> {
+            event -> getServer().getPluginManager().callEvent(event), id -> {
                 org.bukkit.entity.Player player = getServer().getPlayer(id);
                 return player != null && player.getWorld().getEnvironment() == org.bukkit.World.Environment.THE_END;
             }, id -> {
@@ -71,14 +66,13 @@ public class JudgmentPlugin extends JavaPlugin {
                 return player != null && player.getWorld().getEnvironment() == org.bukkit.World.Environment.NETHER;
             }, getLogger());
         pvpPresentation = new PvpPresentation(pvpService);
-        dragonEggPrivilege = new DragonEggPrivilege(this, pvpService, () -> dragonEggSettings);
         combatItemCooldownManager = new CombatItemCooldownManager(
             new CombatItemCooldownStore(getDataFolder().toPath().resolve("combat-item-cooldowns.yml")),
             () -> combatItemSettings, id -> judgmentService.getCombatTag(id).isPresent(),
             System::currentTimeMillis, getLogger());
         settingsGui = new SettingsGui(this, () -> settings, this::setCombatTagMillis, this::setPromptTimeoutMillis,
             this::setInvisibleKillerObfuscation,
-            () -> pvpSettings, this::setPvpSettings, () -> dragonEggSettings, this::setDragonEggSettings,
+            () -> pvpSettings, this::setPvpSettings,
             () -> combatItemSettings, this::setCombatItemSetting, this::setCombatItemScope,
             this::setCombatItemDamageModifier,
             this::setRequireLanding, this::setItemCooldownBossBars, this::setCombatTimerBossBar,
@@ -110,9 +104,6 @@ public class JudgmentPlugin extends JavaPlugin {
         combatBossBarController = new CombatBossBarController(this, judgmentService, combatItemCooldownManager,
             () -> combatItemSettings, () -> settings);
         pvpPresentation.refreshAll();
-        getServer().getScheduler().runTaskTimer(this, () -> {
-            for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
-        }, 1L, 20L);
 
         JudgmentCommand judgmentCommand = new JudgmentCommand(judgmentService, settingsGui, pvpService,
             player -> pvpPresentation.refreshAll());
@@ -120,10 +111,11 @@ public class JudgmentPlugin extends JavaPlugin {
         command.setExecutor(judgmentCommand);
         command.setTabCompleter(judgmentCommand);
 
-        getServer().getPluginManager().registerEvents(new JudgmentListener(judgmentService, settingsGui, dragonEggPrivilege), this);
+        getServer().getPluginManager().registerEvents(new JudgmentListener(judgmentService, settingsGui), this);
         getServer().getPluginManager().registerEvents(
             new InvisibleKillerObfuscation(() -> settings.invisibleKillerObfuscation()), this);
-        for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
+        getServer().getPluginManager().registerEvents(new LegacyEggEffectCleanup(), this);
+        getServer().getOnlinePlayers().forEach(LegacyEggEffectCleanup::clear);
     }
 
     @Override
@@ -153,7 +145,6 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set("pvp.protect-untagged-from-player-damage", updated.protectUntaggedFromPlayerDamage());
         saveConfig();
         if (pvpPresentation != null) pvpPresentation.refreshAll();
-        if (dragonEggPrivilege != null) for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
     }
 
     private void setEnchantmentSettings(EnchantmentSettings updated) {
@@ -166,22 +157,6 @@ public class JudgmentPlugin extends JavaPlugin {
         getConfig().set(EnchantmentSettings.CONFIG_ROOT + ".limits", limits);
         saveConfig();
         enchantmentController.rulesChanged();
-    }
-
-    private void setDragonEggSettings(DragonEggSettings updated) {
-        dragonEggSettings = updated;
-        getConfig().set("pvp.dragon-egg.enabled", updated.enabled());
-        getConfig().set("pvp.dragon-egg.effects.glow", updated.glow());
-        getConfig().set("pvp.dragon-egg.effects.strength", updated.strength());
-        getConfig().set("pvp.dragon-egg.effects.speed", updated.speed());
-        saveConfig();
-        if (dragonEggPrivilege != null) for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) dragonEggPrivilege.refresh(player);
-    }
-
-    private boolean dragonEggPrivilegeHasEgg(org.bukkit.entity.Player player) {
-        return java.util.Arrays.stream(player.getInventory().getContents())
-            .filter(java.util.Objects::nonNull)
-            .anyMatch(item -> item.getType() == org.bukkit.Material.DRAGON_EGG && item.getAmount() > 0);
     }
 
     private void reloadJudgmentSettings() {

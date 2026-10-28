@@ -39,10 +39,14 @@ public final class PvpCommand implements TabExecutor {
                 + ". No change was made. You can change it in " + formatWait(result.waitMillis()) + ".";
             case STORAGE_ERROR -> "PvP status could not be saved. Contact an administrator; no change was made.";
             case MODULE_DISABLED -> "PvP tags are disabled. PvP is active for everyone and cannot be toggled.";
-            case HOLDING_DRAGON_EGG -> status + " You cannot change PvP while holding the dragon egg.";
+            case EXTERNALLY_DENIED -> status + " This change was blocked by another plugin.";
             case END_DIMENSION -> status + " You cannot change PvP while in the End dimension.";
             case NETHER_DIMENSION -> status + " You cannot change PvP while in the Nether dimension.";
         };
+        if (result.outcome() == PvpService.Outcome.EXTERNALLY_DENIED && result.denialMessage() != null) {
+            player.sendMessage(result.denialMessage());
+            return true;
+        }
         player.sendMessage(Component.text(message, result.outcome() == PvpService.Outcome.CHANGED
             ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
         if (result.outcome() == PvpService.Outcome.CHANGED) refresh.accept(player);

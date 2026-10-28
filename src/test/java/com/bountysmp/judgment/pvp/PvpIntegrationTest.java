@@ -3,7 +3,7 @@ package com.bountysmp.judgment.pvp;
 import com.bountysmp.judgment.JudgmentPlugin;
 import com.bountysmp.judgment.gui.CombatItemMenuHolder;
 import com.bountysmp.judgment.gui.CombatLogMenuHolder;
-import com.bountysmp.judgment.gui.DragonEggMenuHolder;
+import com.bountysmp.judgment.gui.EnchantmentMenuHolder;
 import com.bountysmp.judgment.gui.PvpTagsMenuHolder;
 import com.bountysmp.judgment.gui.SettingsMenuHolder;
 import net.kyori.adventure.text.Component;
@@ -63,6 +63,29 @@ class PvpIntegrationTest {
         assertEquals(List.of("on", "off"), plugin.getCommand("judgment").tabComplete(player, "judgment", new String[]{"pvp", "Explorer", "o"}));
     }
 
+    @Test void publicEventVetoReachesCommandAndAdminCorrectionBypassesIt() {
+        var reason = Component.text("Restricted by an optional plugin");
+        server.getPluginManager().registerEvents(new org.bukkit.event.Listener() {
+            @org.bukkit.event.EventHandler
+            public void onToggle(com.bountysmp.judgment.event.PvpToggleEvent event) {
+                event.setCancelled(true);
+                event.setDenialMessage(reason);
+            }
+        }, plugin);
+        server.dispatchCommand(player, "pvp on");
+        assertFalse(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+        assertEquals(reason, player.nextComponentMessage());
+        player.setOp(true);
+        server.dispatchCommand(player, "judgment pvp Explorer on");
+        assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+    }
+
+    @Test void eggCarrierCanToggleWhenOnlyJudgmentIsInstalled() {
+        player.getInventory().setItem(0, new ItemStack(org.bukkit.Material.DRAGON_EGG));
+        server.dispatchCommand(player, "pvp on");
+        assertTrue(plugin.getPvpService().isPvpEnabled(player.getUniqueId()));
+    }
+
     @Test void prefixesPreserveAndRestoreOriginalPresentation() {
         var board = server.getScoreboardManager().getMainScoreboard();
         player.setScoreboard(board);
@@ -91,12 +114,12 @@ class PvpIntegrationTest {
         assertEquals("[Builder] ", plain(original.prefix()));
     }
 
-    @Test void onlyPvpEnabledPlayersCanPickupTheDragonEgg() {
+    @Test void judgmentAloneDoesNotRestrictDragonEggPickup() {
         org.bukkit.entity.Item egg = player.getWorld().dropItem(player.getLocation(), new ItemStack(org.bukkit.Material.DRAGON_EGG));
         PlayerAttemptPickupItemEvent blocked = new PlayerAttemptPickupItemEvent(player, egg);
         server.getPluginManager().callEvent(blocked);
-        assertTrue(blocked.isCancelled());
-        assertFalse(blocked.getFlyAtPlayer());
+        assertFalse(blocked.isCancelled());
+        assertTrue(blocked.getFlyAtPlayer());
 
         assertTrue(server.dispatchCommand(player, "pvp on"));
         PlayerAttemptPickupItemEvent allowed = new PlayerAttemptPickupItemEvent(player, egg);
@@ -199,10 +222,9 @@ class PvpIntegrationTest {
         click(49);
 
         click(16);
-        assertTrue(player.getOpenInventory().getTopInventory().getHolder() instanceof DragonEggMenuHolder);
-        for (int slot : new int[] {10, 12, 14, 16, 26})
-            assertNotNull(player.getOpenInventory().getTopInventory().getItem(slot));
-        click(26);
+        assertInstanceOf(EnchantmentMenuHolder.class, player.getOpenInventory().getTopInventory().getHolder());
+        click(49);
+        assertNull(player.getOpenInventory().getTopInventory().getItem(22));
 
         WorldMock world = (WorldMock) player.getWorld();
         world.setEnvironment(World.Environment.THE_END);

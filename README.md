@@ -21,8 +21,7 @@ untouched, status commands cannot change them, and `[PvP]` name prefixes are hid
 Re-enabling the module restores each player's saved preference.
 
 `/pvp` toggles PvP; `/pvp on` and `/pvp off` set it explicitly. Everyone can use
-these commands. A player carrying a dragon egg cannot change their PvP status until
-the egg is no longer in their inventory. Both players must have PvP **ON** to fight. New preferences default
+these commands. Both players must have PvP **ON** to fight. New preferences default
 to **OFF**; admins can change that default without changing existing saved statuses.
 The first change is immediately available unless combat prevents disabling.
 
@@ -92,18 +91,32 @@ Do not delete this file when upgrading. If loading or saving fails, PvP attacks 
 status changes are blocked until storage is repaired and the server restarted. Errors
 are logged; damaged data is never silently replaced with default preferences.
 
-Future modules can use `JudgmentPlugin#getPvpService()`, `isPvpEnabled(UUID)`, and
-`canAttack(UUID, UUID)` on the server thread. Dragon-egg pickup restrictions are not implemented.
+Other plugins can use `JudgmentPlugin#getPvpService()`, `isPvpEnabled(UUID)`, and
+`canAttack(UUID, UUID)` on the server thread. The cancellable
+`com.bountysmp.judgment.event.PvpToggleEvent` exposes an eligible ordinary change's
+player UUID, current/requested status, and optional Adventure denial message. It fires
+after built-in checks and before saving. Unchanged requests and administrator
+corrections bypass the event; cancelled changes do not start a cooldown.
 
-### Dragon Egg Privilege
+### DragonEgg extraction and upgrading
 
-Players with PvP disabled cannot pick up a dropped dragon egg. The administrator settings
-menu also has a `Dragon Egg` sub-menu. The privilege is off by default. When enabled, a
-player with PvP enabled who carries a dragon egg receives whichever effects are
-enabled there: Glow, Strength I, and Speed I. Effects are permanent while the egg is
-held and are removed when the player no longer has one. The plugin marks only its own
-effects, so unrelated potion effects are preserved. This privilege is cosmetic and
-does not change who may pick up an egg.
+Dragon egg carrier effects and PvP restrictions now belong to the separate **DragonEgg**
+plugin, maintained at `../DragonEgg`. Judgment alone applies no egg pickup or toggle
+restrictions. Enchantment Rules now occupies the former Dragon Egg position in the main
+settings menu (slot 16).
+
+To retain egg functionality, replace Judgment's JAR, install `DragonEgg-0.1.0.jar`, and
+restart. DragonEgg imports `pvp.dragon-egg` from `plugins/Judgment/config.yml` only when
+its own config does not exist; retain the old config until that first startup. The
+source config is left intact, but Judgment no longer reads those settings. Existing
+PvP preferences and other Judgment data remain in place.
+
+Configure the extracted feature using `/dragonegg settings` (`dragonegg.admin`, default
+operator). It runs without Judgment; when Judgment is installed it preserves PvP-based
+pickup, effect eligibility, and carrier toggle restrictions. Its master switch now
+disables **all** egg behavior, including those restrictions; it remains off by default.
+Judgment clears its old marked permanent egg effects on startup and player join, even
+when DragonEgg is not installed.
 
 ## Enchantment Rules
 
@@ -222,7 +235,6 @@ Editable settings:
 - **CombatLog:** combat tag duration, prompt timeout, combat timer boss bar, and invisible-killer masking
 - **PvP Tags:** default status, toggle cooldown, post-combat wait, End lock, and Nether lock
 - **Combat Rules:** cooldown boss bars, per-rule cooldowns/bans/scopes, and explosive player-damage modifiers
-- **Dragon Egg:** privilege and individual effect toggles
 - **Enchantment Rules:** gear enchantment bans, maximum levels, and module toggle
 
 Displayed but locked for now:

@@ -1,9 +1,13 @@
 package com.bountysmp.judgment.pvp;
 
+import com.bountysmp.judgment.event.PvpToggleEvent;
+import net.kyori.adventure.text.Component;
+
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -12,14 +16,18 @@ import java.util.logging.Logger;
 
 /** Access on the server thread. All eligibility timestamps are wall-clock milliseconds. */
 public final class PvpService {
-    public enum Outcome { CHANGED, UNCHANGED, WAIT, STORAGE_ERROR, MODULE_DISABLED, HOLDING_DRAGON_EGG, END_DIMENSION, NETHER_DIMENSION }
-    public record Result(Outcome outcome, boolean enabled, long waitMillis) {}
+    public enum Outcome { CHANGED, UNCHANGED, WAIT, STORAGE_ERROR, MODULE_DISABLED, EXTERNALLY_DENIED, END_DIMENSION, NETHER_DIMENSION }
+    public record Result(Outcome outcome, boolean enabled, long waitMillis, Component denialMessage) {
+        public Result(Outcome outcome, boolean enabled, long waitMillis) {
+            this(outcome, enabled, waitMillis, null);
+        }
+    }
 
     private final PvpStore store;
     private final Supplier<PvpSettings> settings;
     private final LongSupplier clock;
     private final Predicate<UUID> activelyTagged;
-    private final Predicate<UUID> holdingDragonEgg;
+    private final Consumer<PvpToggleEvent> toggleEvents;
     private final Predicate<UUID> inEndDimension;
     private final Predicate<UUID> inNetherDimension;
     private final Logger logger;
@@ -28,28 +36,17 @@ public final class PvpService {
 
     public PvpService(PvpStore store, Supplier<PvpSettings> settings, LongSupplier clock,
                       Predicate<UUID> activelyTagged, Logger logger) {
-        this(store, settings, clock, activelyTagged, ignored -> false, ignored -> false, ignored -> false, logger);
+        this(store, settings, clock, activelyTagged, event -> {}, ignored -> false, ignored -> false, logger);
     }
 
     public PvpService(PvpStore store, Supplier<PvpSettings> settings, LongSupplier clock,
-                      Predicate<UUID> activelyTagged, Predicate<UUID> holdingDragonEgg, Logger logger) {
-        this(store, settings, clock, activelyTagged, holdingDragonEgg, ignored -> false, ignored -> false, logger);
-    }
-
-    public PvpService(PvpStore store, Supplier<PvpSettings> settings, LongSupplier clock,
-                      Predicate<UUID> activelyTagged, Predicate<UUID> holdingDragonEgg,
-                      Predicate<UUID> inEndDimension, Logger logger) {
-        this(store, settings, clock, activelyTagged, holdingDragonEgg, inEndDimension, ignored -> false, logger);
-    }
-
-    public PvpService(PvpStore store, Supplier<PvpSettings> settings, LongSupplier clock,
-                      Predicate<UUID> activelyTagged, Predicate<UUID> holdingDragonEgg,
+                      Predicate<UUID> activelyTagged, Consumer<PvpToggleEvent> toggleEvents,
                       Predicate<UUID> inEndDimension, Predicate<UUID> inNetherDimension, Logger logger) {
         this.store = store;
         this.settings = settings;
         this.clock = clock;
         this.activelyTagged = activelyTagged;
-        this.holdingDragonEgg = holdingDragonEgg;
+        this.toggleEvents = toggleEvents;
         this.inEndDimension = inEndDimension;
         this.inNetherDimension = inNetherDimension;
         this.logger = logger;
@@ -92,7 +89,6 @@ public final class PvpService {
         PvpState old = states.get(id);
         boolean enabled = requested == null ? !old.enabled() : requested;
         if (enabled == old.enabled()) return new Result(Outcome.UNCHANGED, enabled, 0);
-        if (holdingDragonEgg.test(id)) return new Result(Outcome.HOLDING_DRAGON_EGG, old.enabled(), 0);
         if (settings.get().preventToggleInEnd() && inEndDimension.test(id)) {
             return new Result(Outcome.END_DIMENSION, old.enabled(), 0);
         }
@@ -107,6 +103,9 @@ public final class PvpService {
             if (activelyTagged.test(id) || old.combatEndMillis() > now) wait = Math.max(1L, wait);
         }
         if (wait > 0) return new Result(Outcome.WAIT, old.enabled(), wait);
+        PvpToggleEvent event = new PvpToggleEvent(id, old.enabled(), enabled);
+        toggleEvents.accept(event);
+        if (event.isCancelled()) return new Result(Outcome.EXTERNALLY_DENIED, old.enabled(), 0, event.getDenialMessage());
         var updated = new HashMap<>(states);
         updated.put(id, new PvpState(enabled, now, old.combatEndMillis(), old.opponents()));
         return commit(updated) ? new Result(Outcome.CHANGED, enabled, 0)

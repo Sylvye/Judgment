@@ -84,10 +84,3 @@ pvp:
   # Block damage credited to another player unless both players have PvP enabled.
   # Includes projectiles, pets, TNT, minecarts, beds, respawn anchors, and end crystals.
   protect-untagged-from-player-damage: true
-  dragon-egg:
-    # Disabled until an administrator enables the privilege.
-    enabled: false
-    effects:
-      glow: true
-      strength: true
-      speed: true

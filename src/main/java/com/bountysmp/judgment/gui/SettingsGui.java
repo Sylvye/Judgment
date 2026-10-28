@@ -7,7 +7,6 @@ import com.bountysmp.judgment.config.JudgmentSettings;
 import com.bountysmp.judgment.enchantment.EnchantmentSettings;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
-import com.bountysmp.judgment.pvp.DragonEggSettings;
 import com.bountysmp.judgment.pvp.PvpSettings;
 import com.bountysmp.judgment.util.DurationParser;
 import net.kyori.adventure.text.Component;
@@ -40,8 +39,7 @@ public final class SettingsGui {
     private static final int MAIN_COMBAT_LOG_SLOT = 10;
     private static final int MAIN_PVP_TAGS_SLOT = 12;
     private static final int MAIN_COMBAT_RULES_SLOT = 14;
-    private static final int MAIN_DRAGON_EGG_SLOT = 16;
-    private static final int MAIN_ENCHANTMENTS_SLOT = 22;
+    private static final int MAIN_ENCHANTMENTS_SLOT = 16;
     private static final int ENCHANTMENTS_PER_PAGE = 45;
     private static final int COMBAT_TAG_SLOT = 10;
     private static final int PROMPT_TIMEOUT_SLOT = 12;
@@ -76,8 +74,6 @@ public final class SettingsGui {
     private final Consumer<Boolean> invisibleKillerUpdater;
     private final Supplier<PvpSettings> pvpSettings;
     private final Consumer<PvpSettings> pvpUpdater;
-    private final Supplier<DragonEggSettings> dragonEggSettings;
-    private final Consumer<DragonEggSettings> dragonEggUpdater;
     private final Supplier<CombatItemSettings> combatItemSettings;
     private final BiConsumer<CombatItemAction, Double> combatItemUpdater;
     private final BiConsumer<CombatItemAction, CombatItemScope> combatItemScopeUpdater;
@@ -92,8 +88,7 @@ public final class SettingsGui {
     public SettingsGui(Plugin plugin, Supplier<JudgmentSettings> settingsSupplier,
                        LongConsumer combatTagUpdater, LongConsumer promptTimeoutUpdater,
                        Consumer<Boolean> invisibleKillerUpdater, Supplier<PvpSettings> pvpSettings,
-                       Consumer<PvpSettings> pvpUpdater, Supplier<DragonEggSettings> dragonEggSettings,
-                       Consumer<DragonEggSettings> dragonEggUpdater,
+                       Consumer<PvpSettings> pvpUpdater,
                        Supplier<CombatItemSettings> combatItemSettings,
                        BiConsumer<CombatItemAction, Double> combatItemUpdater,
                        BiConsumer<CombatItemAction, CombatItemScope> combatItemScopeUpdater,
@@ -110,8 +105,6 @@ public final class SettingsGui {
         this.invisibleKillerUpdater = invisibleKillerUpdater;
         this.pvpSettings = pvpSettings;
         this.pvpUpdater = pvpUpdater;
-        this.dragonEggSettings = dragonEggSettings;
-        this.dragonEggUpdater = dragonEggUpdater;
         this.combatItemSettings = combatItemSettings;
         this.combatItemUpdater = combatItemUpdater;
         this.combatItemScopeUpdater = combatItemScopeUpdater;
@@ -138,9 +131,6 @@ public final class SettingsGui {
         inventory.setItem(MAIN_COMBAT_RULES_SLOT, GuiItems.namedItem(Material.NETHERITE_SWORD,
             Component.text("Combat Rules", NamedTextColor.DARK_RED),
             List.of(Component.text("Managed abilities, explosives, cooldowns, and damage."), Component.text("Click to open."))));
-        inventory.setItem(MAIN_DRAGON_EGG_SLOT, GuiItems.namedItem(Material.DRAGON_EGG,
-            Component.text("Dragon Egg", NamedTextColor.LIGHT_PURPLE),
-            List.of(Component.text("Dragon egg privilege and effect settings."), Component.text("Click to open."))));
         inventory.setItem(MAIN_ENCHANTMENTS_SLOT, GuiItems.namedItem(Material.ENCHANTING_TABLE,
             Component.text("Enchantment Rules", NamedTextColor.AQUA),
             List.of(Component.text("Global gear enchantment bans and maximum levels."), Component.text("Click to open."))));
@@ -267,25 +257,6 @@ public final class SettingsGui {
         admin.openInventory(inventory);
     }
 
-    public void openDragonEgg(Player admin) {
-        if (!authorized(admin)) return;
-        DragonEggMenuHolder holder = new DragonEggMenuHolder();
-        Inventory inventory = Bukkit.createInventory(holder, MODULE_SIZE,
-            Component.text("Dragon Egg Settings", NamedTextColor.LIGHT_PURPLE));
-        holder.setInventory(inventory);
-        DragonEggSettings settings = dragonEggSettings.get();
-        inventory.setItem(10, GuiItems.namedItem(Material.DRAGON_EGG,
-            Component.text("Feature: " + onOff(settings.enabled()), NamedTextColor.LIGHT_PURPLE), List.of(Component.text("Click to toggle."))));
-        inventory.setItem(12, GuiItems.namedItem(Material.GLOWSTONE_DUST,
-            Component.text("Glow: " + onOff(settings.glow()), NamedTextColor.YELLOW), List.of(Component.text("Click to toggle."))));
-        inventory.setItem(14, GuiItems.namedItem(Material.POTION,
-            Component.text("Strength I: " + onOff(settings.strength()), NamedTextColor.RED), List.of(Component.text("Click to toggle."))));
-        inventory.setItem(16, GuiItems.namedItem(Material.SUGAR,
-            Component.text("Speed I: " + onOff(settings.speed()), NamedTextColor.AQUA), List.of(Component.text("Click to toggle."))));
-        addBack(inventory);
-        admin.openInventory(inventory);
-    }
-
     public void openCombatItems(Player admin) {
         if (!authorized(admin)) return;
         CombatItemMenuHolder holder = new CombatItemMenuHolder();
@@ -352,7 +323,6 @@ public final class SettingsGui {
         if (holder instanceof SettingsMenuHolder) handleMainClick(admin, rawSlot);
         else if (holder instanceof CombatLogMenuHolder) handleCombatLogClick(admin, rawSlot);
         else if (holder instanceof PvpTagsMenuHolder) handlePvpClick(admin, rawSlot);
-        else if (holder instanceof DragonEggMenuHolder) handleDragonEggClick(admin, rawSlot);
         else if (holder instanceof CombatItemMenuHolder) handleCombatRuleClick(admin, rawSlot, clickType);
         else if (holder instanceof EnchantmentMenuHolder enchantments) handleEnchantmentClick(admin, rawSlot, enchantments);
     }
@@ -362,7 +332,6 @@ public final class SettingsGui {
             case MAIN_COMBAT_LOG_SLOT -> openCombatLog(admin);
             case MAIN_PVP_TAGS_SLOT -> openPvpTags(admin);
             case MAIN_COMBAT_RULES_SLOT -> openCombatItems(admin);
-            case MAIN_DRAGON_EGG_SLOT -> openDragonEgg(admin);
             case MAIN_ENCHANTMENTS_SLOT -> openEnchantments(admin, 0);
             default -> { }
         }
@@ -416,21 +385,6 @@ public final class SettingsGui {
             beginEdit(admin, new PendingEdit(input, null, MenuSection.PVP_TAGS),
                 "Type a duration like 0s, 10m, 24h, or cancel.");
         }
-    }
-
-    private void handleDragonEggClick(Player admin, int slot) {
-        DragonEggSettings old = dragonEggSettings.get();
-        DragonEggSettings updated = switch (slot) {
-            case 10 -> new DragonEggSettings(!old.enabled(), old.glow(), old.strength(), old.speed());
-            case 12 -> new DragonEggSettings(old.enabled(), !old.glow(), old.strength(), old.speed());
-            case 14 -> new DragonEggSettings(old.enabled(), old.glow(), !old.strength(), old.speed());
-            case 16 -> new DragonEggSettings(old.enabled(), old.glow(), old.strength(), !old.speed());
-            default -> null;
-        };
-        if (updated != null) {
-            dragonEggUpdater.accept(updated);
-            openDragonEgg(admin);
-        } else if (slot == BACK_SLOT) open(admin);
     }
 
     private void handleCombatRuleClick(Player admin, int slot, ClickType clickType) {
@@ -564,7 +518,7 @@ public final class SettingsGui {
     public static boolean isSettingsHolder(InventoryHolder holder) {
         return holder instanceof SettingsMenuHolder || holder instanceof CombatLogMenuHolder
             || holder instanceof PvpTagsMenuHolder || holder instanceof CombatItemMenuHolder
-            || holder instanceof DragonEggMenuHolder || holder instanceof EnchantmentMenuHolder;
+            || holder instanceof EnchantmentMenuHolder;
     }
 
     private boolean authorized(Player admin) {

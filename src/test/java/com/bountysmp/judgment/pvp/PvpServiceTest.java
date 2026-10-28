@@ -31,8 +31,37 @@ class PvpServiceTest {
     }
 
     PvpService reopen() {
-        return new PvpService(store, settings::get, now::get, id -> active.get(), ignored -> false,
+        return new PvpService(store, settings::get, now::get, id -> active.get(), event -> {},
             id -> inEnd.get(), id -> inNether.get(), Logger.getAnonymousLogger());
+    }
+
+    @Test void externalVetoDoesNotPersistOrStartCooldownAndAdminBypassesIt() throws Exception {
+        var veto = new AtomicBoolean(true);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var reason = net.kyori.adventure.text.Component.text("External restriction");
+        service = new PvpService(store, settings::get, now::get, id -> false, event -> {
+            calls.incrementAndGet();
+            assertEquals(a, event.getPlayerId());
+            assertFalse(event.isCurrentEnabled());
+            assertTrue(event.isRequestedEnabled());
+            event.setCancelled(veto.get());
+            event.setDenialMessage(reason);
+        }, id -> false, id -> false, Logger.getAnonymousLogger());
+        var result = service.change(a, true);
+        assertEquals(PvpService.Outcome.EXTERNALLY_DENIED, result.outcome());
+        assertEquals(reason, result.denialMessage());
+        assertFalse(store.load().get(a).enabled());
+        assertEquals(-1, store.load().get(a).lastToggleMillis());
+        assertEquals(PvpService.Outcome.UNCHANGED, service.change(a, false).outcome());
+        assertEquals(1, calls.get());
+        assertEquals(PvpService.Outcome.CHANGED, service.adminSet(a, true).outcome());
+        assertEquals(1, calls.get());
+        service.adminSet(a, false);
+        veto.set(false);
+        assertEquals(PvpService.Outcome.CHANGED, service.change(a, true).outcome());
+        assertEquals(2, calls.get());
+        assertEquals(PvpService.Outcome.WAIT, service.change(a, false).outcome());
+        assertEquals(2, calls.get());
     }
 
     @Test void firstChangeIsImmediateAndBothDirectionsShareCooldown() {

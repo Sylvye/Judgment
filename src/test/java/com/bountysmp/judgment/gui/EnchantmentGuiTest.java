@@ -37,7 +37,7 @@ class EnchantmentGuiTest {
 
     @AfterEach void cleanup() { MockBukkit.unmock(); }
 
-    private void open() { server.dispatchCommand(admin, "judgment settings"); click(22); }
+    private void open() { server.dispatchCommand(admin, "judgment settings"); click(16); }
 
     private void click(int slot) { click(slot, ClickType.LEFT); }
     private void click(int slot, ClickType type) {
